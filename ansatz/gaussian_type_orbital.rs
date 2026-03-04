@@ -66,6 +66,7 @@ impl Ansatz for GTO {
         )
     }
 
+    // Adapted from https://gqcg-res.github.io/knowdes/gaussian-type-orbitals.html
     fn laplacian(&self, x: f64, y: f64, z: f64) -> Complex<f64> {
         // This term is used in all 3 components, so we compute it only once.
         let intermediate = -2.0
@@ -198,6 +199,7 @@ mod tests {
         );
     }
 
+    // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
     #[test]
     fn test_kinetic_energy() {
         let mut test_gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0);

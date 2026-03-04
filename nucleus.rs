@@ -50,6 +50,7 @@ mod tests {
         depth_voxels: 100,
     };
 
+    // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
     #[test]
     fn test_hydrogen_nuclear_potential() {
         let mut test_gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0);
