@@ -2,6 +2,7 @@ use num::complex::Complex;
 
 use crate::ansatz::Ansatz;
 use crate::grid::Grid;
+use crate::grid::GridConfig;
 
 pub struct Nucleus {
     pub x: f64,
@@ -12,7 +13,8 @@ pub struct Nucleus {
 
 // Populate a grid with the nuclear-electron coulombic energy. Note that this grid alone is
 // insufficient for the calculation, it needs to be combined with wavefunction bra and kets.
-pub fn nuclear_coulomb_grid(grid: &mut Grid, nuclei: &Vec<Nucleus>) {
+pub fn nuclear_potential(nuclei: &Vec<Nucleus>, grid_config: GridConfig) -> Grid {
+    let mut grid = Grid::new(grid_config);
     grid.fill(&|x, y, z| -> Complex<f64> {
         nuclei
             .iter()
@@ -28,31 +30,41 @@ pub fn nuclear_coulomb_grid(grid: &mut Grid, nuclei: &Vec<Nucleus>) {
             })
             .fold(Complex::new(0.0, 0.0), |acc, e| -> Complex<f64> { acc + e })
     });
+    grid
 }
 
 mod tests {
     use super::*;
     use crate::ansatz::gaussian_type_orbital::GTO;
+    use crate::grid::GridConfig;
+
+    const K_GRID_CONFIG: GridConfig = GridConfig {
+        start_x: -5.0,
+        start_y: -5.0,
+        start_z: -5.0,
+        end_x: 5.0,
+        end_y: 5.0,
+        end_z: 5.0,
+        width_voxels: 100,
+        height_voxels: 100,
+        depth_voxels: 100,
+    };
 
     #[test]
-    fn test_hydrogen_nuclear_electron_energy() {
-        let test_grid = Grid::new(-5.0, -5.0, -5.0, 5.0, 5.0, 5.0, 100, 100, 100);
-        let test_gto = GTO::new(0.0, 0.0, 0.0, 1.0, 0.25, 0, 0, 0);
-        let mut bra = test_grid.clone();
-        let mut ket = test_grid.clone();
-        let mut nuclear_electron_energy = test_grid.clone();
-        test_gto.bra(&mut bra);
-        test_gto.ket(&mut ket);
-        nuclear_coulomb_grid(
-            &mut nuclear_electron_energy,
+    fn test_hydrogen_nuclear_potential() {
+        let mut test_gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0);
+        let bra = test_gto.bra(K_GRID_CONFIG);
+        let ket = test_gto.ket(K_GRID_CONFIG);
+        let potential = nuclear_potential(
             &vec![Nucleus {
                 x: 0.0,
                 y: 0.0,
                 z: 0.0,
                 charge: 1.0,
             }],
+            K_GRID_CONFIG,
         );
-        let integral = (bra * nuclear_electron_energy * ket).integrate().re;
+        let integral = (bra * potential * ket).integrate().re;
         assert!(
             (integral - -0.798).abs() < 0.1,
             "Incorrect hydrogen nuclear-electron energy! Expected {} Actual {}",

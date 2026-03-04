@@ -1,13 +1,12 @@
 use num::complex::Complex;
 
 use crate::grid::Grid;
+use crate::grid::GridConfig;
 
+pub mod caching_ansatz;
 pub mod gaussian_type_orbital;
 
 pub trait Ansatz {
-    // Set the contraction coefficient for this Ansatz.
-    fn set_coefficient(&mut self, coefficient: f64);
-
     // Evaluate the position operator at coordinates (x, y, z).
     fn pos(&self, x: f64, y: f64, z: f64) -> Complex<f64>;
 
@@ -15,17 +14,24 @@ pub trait Ansatz {
     fn laplacian(&self, x: f64, y: f64, z: f64) -> Complex<f64>;
 
     // Fill a grid with the position operator.
-    fn ket(&self, grid: &mut Grid) {
+    fn ket(&mut self, grid_config: GridConfig) -> Grid {
+        let mut grid = Grid::new(grid_config);
         grid.fill(&|x, y, z| -> Complex<f64> { self.pos(x, y, z) });
+        grid
     }
 
     // Fill a grid with the complex conjugate of the position operator.
-    fn bra(&self, grid: &mut Grid) {
+    fn bra(&mut self, grid_config: GridConfig) -> Grid {
+        let mut grid = Grid::new(grid_config);
         grid.fill(&|x, y, z| -> Complex<f64> { self.pos(x, y, z).conj() });
+        grid
     }
 
-    // Fill a grid with the output of the kinetic energy operator.
-    fn kinetic_energy(&self, grid: &mut Grid) {
+    // Fill a grid with the output of the kinetic energy operator. Needs a bra to dot product with
+    // to yield actual kinetic energy grid.
+    fn kinetic_energy(&mut self, grid_config: GridConfig) -> Grid {
+        let mut grid = Grid::new(grid_config);
         grid.fill(&|x, y, z| -> Complex<f64> { -0.5 * self.laplacian(x, y, z) });
+        grid
     }
 }
