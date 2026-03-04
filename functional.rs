@@ -27,12 +27,12 @@ mod tests {
     use crate::grid::GridConfig;
 
     const K_GRID_CONFIG: GridConfig = GridConfig {
-        start_x: -5.0,
-        start_y: -5.0,
-        start_z: -5.0,
-        end_x: 5.0,
-        end_y: 5.0,
-        end_z: 5.0,
+        start_x: -3.0,
+        start_y: -3.0,
+        start_z: -3.0,
+        end_x: 3.0,
+        end_y: 3.0,
+        end_z: 3.0,
         width_voxels: 30,
         height_voxels: 30,
         depth_voxels: 30,

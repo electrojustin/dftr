@@ -5,6 +5,7 @@ use crate::grid::GridConfig;
 
 pub mod caching_ansatz;
 pub mod gaussian_type_orbital;
+pub mod sto_ng;
 
 pub trait Ansatz {
     // Evaluate the position operator at coordinates (x, y, z).
