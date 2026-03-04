@@ -22,10 +22,8 @@ pub fn nuclear_potential(nuclei: &Vec<Nucleus>, grid_config: GridConfig) -> Grid
                 let dx = nucleus.x - x;
                 let dy = nucleus.y - y;
                 let dz = nucleus.z - z;
-                // We experience numericals instability the closer we get to a nucleus since the
-                // distance will be 0, triggering a divide by 0 error. As a practical solution, we
-                // just set the minimum distance to 0.01 A.
-                let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(0.01);
+                // Cap the distance at 0.1 A to avoid divide by 0 numerical instability.
+                let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(0.1);
                 Complex::new(-nucleus.charge / distance, 0.0)
             })
             .fold(Complex::new(0.0, 0.0), |acc, e| -> Complex<f64> { acc + e })
@@ -67,7 +65,7 @@ mod tests {
         );
         let integral = (bra * potential * ket).integrate().re;
         assert!(
-            (integral - -0.798).abs() < 0.1,
+            (integral - -0.798).abs() < 0.01,
             "Incorrect hydrogen nuclear-electron energy! Expected {} Actual {}",
             -0.798,
             integral
