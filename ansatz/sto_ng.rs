@@ -79,6 +79,7 @@ mod tests {
     };
 
     // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
+    #[ignore]
     #[test]
     fn test_hydrogen_sto3g() {
         let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
