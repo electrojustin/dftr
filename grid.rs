@@ -5,6 +5,8 @@ use std::ops;
 
 use num::complex::Complex;
 
+use crate::utils::fft;
+
 #[derive(Debug, Clone)]
 pub struct GridConfig {
     pub start_x: f64,
@@ -50,8 +52,8 @@ impl Hash for GridConfig {
 
 #[derive(Debug, Clone)]
 pub struct Grid {
-    data: Vec<Complex<f64>>,
-    config: GridConfig,
+    pub data: Vec<Complex<f64>>,
+    pub config: GridConfig,
 }
 
 impl Grid {
@@ -112,88 +114,59 @@ impl Grid {
         }
     }
 
-    pub fn convolve(
-        &mut self,
-        func: &impl Fn(f64, f64, f64, f64, f64, f64, Complex<f64>) -> Complex<f64>,
-        dx: Option<f64>,
-        dy: Option<f64>,
-        dz: Option<f64>,
-    ) {
-        let old_data = self.data.clone();
-        let (dx_voxels, dx) = if let Some(dx) = dx {
-            ((dx / self.x_res()).round() as isize, dx)
-        } else {
+    pub fn fourier(&mut self, inverse: bool, recenter: bool) {
+        let x_res = self.x_res();
+        let y_res = self.y_res();
+        let z_res = self.z_res();
+        let (x_shift, y_shift, z_shift) = if recenter {
             (
-                self.config.width_voxels as isize,
-                self.config.end_x - self.config.start_x,
+                self.config.width_voxels - (self.config.width_voxels / 2 - 1),
+                self.config.height_voxels - (self.config.height_voxels / 2 - 1),
+                self.config.depth_voxels - (self.config.depth_voxels / 2 - 1),
             )
-        };
-        let (dy_voxels, dy) = if let Some(dy) = dy {
-            ((dy / self.y_res()).round() as isize, dy)
         } else {
-            (
-                self.config.height_voxels as isize,
-                self.config.end_y - self.config.start_y,
-            )
+            (0, 0, 0)
         };
-        let (dz_voxels, dz) = if let Some(dz) = dz {
-            ((dz / self.z_res()).round() as isize, dz)
-        } else {
-            (
-                self.config.depth_voxels as isize,
-                self.config.end_z - self.config.start_z,
-            )
-        };
-        let cubic_res = self.x_res() * self.y_res() * self.z_res();
-        let mut z = self.config.start_z;
-        for z_idx in 0..(self.config.depth_voxels as isize) {
-            let mut y = self.config.start_y;
-            for y_idx in 0..(self.config.height_voxels as isize) {
-                let mut x = self.config.start_x;
-                for x_idx in 0..(self.config.width_voxels as isize) {
-                    let mut acc = Complex::new(0.0, 0.0);
-                    let mut inner_z = (z - dz).max(self.config.start_z);
-                    for inner_z_idx in (z_idx - dz_voxels).max(0)
-                        ..(z_idx + dz_voxels).min(self.config.depth_voxels as isize)
-                    {
-                        let mut inner_y = (y - dy).max(self.config.start_y);
-                        for inner_y_idx in (y_idx - dy_voxels).max(0)
-                            ..(y_idx + dy_voxels).min(self.config.height_voxels as isize)
-                        {
-                            let mut inner_x = (x - dx).max(self.config.start_x);
-                            for inner_x_idx in (x_idx - dx_voxels).max(0)
-                                ..(x_idx + dx_voxels).min(self.config.width_voxels as isize)
-                            {
-                                acc += cubic_res
-                                    * func(
-                                        x,
-                                        y,
-                                        z,
-                                        inner_x,
-                                        inner_y,
-                                        inner_z,
-                                        old_data[inner_z_idx as usize
-                                            * self.config.width_voxels
-                                            * self.config.height_voxels
-                                            + inner_y_idx as usize * self.config.width_voxels
-                                            + inner_x_idx as usize],
-                                    );
-                                inner_x += self.x_res();
-                            }
-                            inner_y += self.y_res();
-                        }
-                        inner_z += self.z_res();
-                    }
-                    self.data[z_idx as usize
-                        * self.config.width_voxels
-                        * self.config.height_voxels
-                        + y_idx as usize * self.config.width_voxels
-                        + x_idx as usize] = acc;
-                    x += self.x_res();
-                }
-                y += self.y_res();
+        for z_idx in 0..self.config.depth_voxels {
+            for y_idx in 0..self.config.height_voxels {
+                fft(
+                    self.data.as_mut(),
+                    self.config.width_voxels,
+                    x_res,
+                    1,
+                    z_idx * self.config.height_voxels * self.config.width_voxels
+                        + y_idx * self.config.width_voxels,
+                    x_shift,
+                    inverse,
+                );
             }
-            z += self.z_res();
+        }
+
+        for z_idx in 0..self.config.depth_voxels {
+            for x_idx in 0..self.config.width_voxels {
+                fft(
+                    self.data.as_mut(),
+                    self.config.height_voxels,
+                    y_res,
+                    self.config.width_voxels,
+                    z_idx * self.config.height_voxels * self.config.width_voxels + x_idx,
+                    y_shift,
+                    inverse,
+                );
+            }
+        }
+        for y_idx in 0..self.config.height_voxels {
+            for x_idx in 0..self.config.width_voxels {
+                fft(
+                    self.data.as_mut(),
+                    self.config.depth_voxels,
+                    z_res,
+                    self.config.width_voxels * self.config.height_voxels,
+                    y_idx * self.config.width_voxels + x_idx,
+                    z_shift,
+                    inverse,
+                );
+            }
         }
     }
 }
@@ -354,9 +327,9 @@ mod tests {
         end_x: 1.0,
         end_y: 1.0,
         end_z: 1.0,
-        width_voxels: 100,
-        height_voxels: 100,
-        depth_voxels: 100,
+        width_voxels: 64,
+        height_voxels: 64,
+        depth_voxels: 64,
     };
 
     #[test]
@@ -458,6 +431,21 @@ mod tests {
             "Scalar-grid subtraction failed! Expected {} Actual {}",
             -1.0,
             integral
+        );
+    }
+
+    #[test]
+    fn test_fourier() {
+        let mut test = Grid::new(K_GRID_CONFIG.clone());
+        test.fill(&|x, _y, _z| -> Complex<f64> { Complex::new(x, 0.0) });
+        let expected = test.clone();
+        test.fourier(false, false);
+        test.fourier(true, false);
+        let error = (test - expected).integrate().norm_sqr();
+        assert!(
+            error < 0.1,
+            "Fourier or inverse fourier failed! Avg error: {}",
+            error
         );
     }
 }
