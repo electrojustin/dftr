@@ -1,4 +1,4 @@
-mod ansatz;
+mod basis;
 mod functional;
 mod grid;
 mod nucleus;

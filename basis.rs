@@ -3,11 +3,11 @@ use num::complex::Complex;
 use crate::grid::Grid;
 use crate::grid::GridConfig;
 
-pub mod caching_ansatz;
+pub mod caching_basis;
 pub mod gaussian_type_orbital;
 pub mod sto_ng;
 
-pub trait Ansatz {
+pub trait Basis {
     // Evaluate the position operator at coordinates (x, y, z).
     fn pos(&self, x: f64, y: f64, z: f64) -> Complex<f64>;
 

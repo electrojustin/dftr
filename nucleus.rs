@@ -1,6 +1,6 @@
 use num::complex::Complex;
 
-use crate::ansatz::Ansatz;
+use crate::basis::Basis;
 use crate::grid::Grid;
 use crate::grid::GridConfig;
 
@@ -33,7 +33,7 @@ pub fn nuclear_potential(nuclei: &Vec<Nucleus>, grid_config: GridConfig) -> Grid
 
 mod tests {
     use super::*;
-    use crate::ansatz::gaussian_type_orbital::GTO;
+    use crate::basis::gaussian_type_orbital::GTO;
     use crate::grid::GridConfig;
 
     const K_GRID_CONFIG: GridConfig = GridConfig {

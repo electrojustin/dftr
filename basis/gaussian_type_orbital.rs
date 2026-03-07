@@ -1,6 +1,6 @@
 use num::complex::Complex;
 
-use crate::ansatz::Ansatz;
+use crate::basis::Basis;
 use crate::utils::factorial;
 
 // Factor out the core calculations so we can call it multiple times for computing the Laplacian.
@@ -49,7 +49,7 @@ impl GTO {
     }
 }
 
-impl Ansatz for GTO {
+impl Basis for GTO {
     fn pos(&self, x: f64, y: f64, z: f64) -> Complex<f64> {
         Complex::new(
             self.norm

@@ -2,16 +2,16 @@ use std::iter::zip;
 
 use num::complex::Complex;
 
-use crate::ansatz::gaussian_type_orbital::GTO;
-use crate::ansatz::Ansatz;
+use crate::basis::gaussian_type_orbital::GTO;
+use crate::basis::Basis;
 
 // Fixed linear combination of more primitive orbitals, usually GTOs.
-pub struct STONG<T: Ansatz> {
+pub struct STONG<T: Basis> {
     delegates: Vec<T>,
     coefficients: Vec<Complex<f64>>,
 }
 
-impl<T: Ansatz> STONG<T> {
+impl<T: Basis> STONG<T> {
     pub fn new(delegates: Vec<T>, coefficients: Vec<Complex<f64>>) -> Self {
         STONG {
             delegates,
@@ -41,7 +41,7 @@ impl STONG<GTO> {
     }
 }
 
-impl<T: Ansatz> Ansatz for STONG<T> {
+impl<T: Basis> Basis for STONG<T> {
     fn pos(&self, x: f64, y: f64, z: f64) -> Complex<f64> {
         zip(self.delegates.iter(), self.coefficients.iter())
             .fold(Complex::new(0.0, 0.0), |acc, (d, c)| -> Complex<f64> {
@@ -59,8 +59,8 @@ impl<T: Ansatz> Ansatz for STONG<T> {
 /*
 mod tests {
     use super::*;
-    use crate::ansatz::gaussian_type_orbital::GTO;
-    use crate::ansatz::Ansatz;
+    use crate::basis::gaussian_type_orbital::GTO;
+    use crate::basis::Basis;
     use crate::functional::repulsion_potential_functional;
     use crate::grid::GridConfig;
     use crate::nucleus::nuclear_potential;

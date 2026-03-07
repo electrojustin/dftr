@@ -24,8 +24,8 @@ pub fn repulsion_potential_functional(mut electron_density: Grid) -> Grid {
 
 mod tests {
     use super::*;
-    use crate::ansatz::gaussian_type_orbital::GTO;
-    use crate::ansatz::Ansatz;
+    use crate::basis::gaussian_type_orbital::GTO;
+    use crate::basis::Basis;
     use crate::grid::GridConfig;
 
     const K_GRID_CONFIG: GridConfig = GridConfig {

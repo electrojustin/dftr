@@ -2,20 +2,20 @@ use std::collections::HashMap;
 
 use num::complex::Complex;
 
-use crate::ansatz::Ansatz;
+use crate::basis::Basis;
 use crate::grid::Grid;
 use crate::grid::GridConfig;
 
-pub struct CachingAnsatz<T: Ansatz> {
+pub struct CachingBasis<T: Basis> {
     delegate: T,
     ket_cache: HashMap<GridConfig, Grid>,
     bra_cache: HashMap<GridConfig, Grid>,
     kinetic_energy_cache: HashMap<GridConfig, Grid>,
 }
 
-impl<T: Ansatz> CachingAnsatz<T> {
+impl<T: Basis> CachingBasis<T> {
     pub fn new(delegate: T) -> Self {
-        CachingAnsatz {
+        CachingBasis {
             delegate,
             ket_cache: HashMap::new(),
             bra_cache: HashMap::new(),
@@ -24,7 +24,7 @@ impl<T: Ansatz> CachingAnsatz<T> {
     }
 }
 
-impl<T: Ansatz> Ansatz for CachingAnsatz<T> {
+impl<T: Basis> Basis for CachingBasis<T> {
     fn pos(&self, x: f64, y: f64, z: f64) -> Complex<f64> {
         self.delegate.pos(x, y, z)
     }
@@ -58,7 +58,7 @@ impl<T: Ansatz> Ansatz for CachingAnsatz<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ansatz::gaussian_type_orbital::GTO;
+    use crate::basis::gaussian_type_orbital::GTO;
     use crate::grid::Grid;
     use crate::grid::GridConfig;
 
@@ -75,15 +75,15 @@ mod tests {
     };
 
     #[test]
-    fn test_caching_ansatz_proxies() {
+    fn test_caching_basis_proxies() {
         let mut gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0);
         let expected_bra = gto.bra(K_GRID_CONFIG);
         let expected_ket = gto.ket(K_GRID_CONFIG);
         let expected_kinetic_energy = gto.kinetic_energy(K_GRID_CONFIG);
-        let mut caching_ansatz = CachingAnsatz::new(gto);
-        let actual_bra = caching_ansatz.bra(K_GRID_CONFIG);
-        let actual_ket = caching_ansatz.ket(K_GRID_CONFIG);
-        let actual_kinetic_energy = caching_ansatz.kinetic_energy(K_GRID_CONFIG);
+        let mut caching_basis = CachingBasis::new(gto);
+        let actual_bra = caching_basis.bra(K_GRID_CONFIG);
+        let actual_ket = caching_basis.ket(K_GRID_CONFIG);
+        let actual_kinetic_energy = caching_basis.kinetic_energy(K_GRID_CONFIG);
         assert!(
             (actual_bra - expected_bra).integrate().re.abs() < 0.1,
             "Caching bra doesn't match delegate bra!"
