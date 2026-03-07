@@ -97,9 +97,11 @@ pub fn fft(
     } else {
         sampling_interval
     };
-    for i in 0..n {
-        let dst_idx = (i + shift) % n;
-        input[dst_idx * stride + offset] = ret[i] * sampling_interval;
+    for i in 0..shift {
+        input[i * stride + offset] = ret[i + n - shift] * sampling_interval;
+    }
+    for i in shift..n {
+        input[i * stride + offset] = ret[i - shift] * sampling_interval;
     }
 }
 
@@ -320,7 +322,6 @@ mod tests {
             fft_conv[i] = fft_conv[i] * test_input[i];
         }
         fft2d(fft_conv.as_mut(), size - (size / 2 - 1), true);
-        //        assert!(conv[0] == Complex::new(1.0, 0.0), "FFT Conv error!\nExpected {:?}\nActual {:?}", conv, fft_conv);
         assert!(
             compare_arrays(conv.as_slice(), fft_conv.as_slice(), 0.01),
             "FFT Conv error!\nExpected {:?}\nActual {:?}",
