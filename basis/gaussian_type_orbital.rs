@@ -19,6 +19,9 @@ fn gto_norm_helper(alpha: f64, i: i32, j: i32, k: i32) -> f64 {
 
 // Returns the unnormalized, real, cartesian gaussian type orbital at (x, y, z).
 fn gto_helper(x: f64, y: f64, z: f64, alpha: f64, i: i32, j: i32, k: i32) -> f64 {
+    let x = if x.abs() < 0.01 { 0.01 } else { x };
+    let y = if y.abs() < 0.01 { 0.01 } else { y };
+    let z = if z.abs() < 0.01 { 0.01 } else { z };
     x.powi(i) * y.powi(j) * z.powi(k) * (-alpha * (x * x + y * y + z * z)).exp()
 }
 
@@ -169,9 +172,9 @@ mod tests {
         end_x: 5.0,
         end_y: 5.0,
         end_z: 5.0,
-        width_voxels: 100,
-        height_voxels: 100,
-        depth_voxels: 100,
+        width_voxels: 64,
+        height_voxels: 64,
+        depth_voxels: 64,
     };
 
     #[test]

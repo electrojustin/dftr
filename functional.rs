@@ -2,6 +2,8 @@ use num::Complex;
 
 use crate::grid::Grid;
 
+pub mod lda;
+
 pub fn repulsion_potential_functional(mut electron_density: Grid) -> Grid {
     // Instead of actually performing the double integral, which is O(N^2) with respect to the
     // grid size, we treat the repulsion potential as a convolution between 1/|r| and p(r),
