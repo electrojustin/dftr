@@ -19,10 +19,18 @@ impl Vector {
         true
     }
 
-    pub fn dot(self, other: Vector) -> Complex<f64> {
-        zip(self.0.into_iter(), other.0.into_iter())
+    pub fn dot(&self, other: &Vector) -> Complex<f64> {
+        zip(self.0.iter(), other.0.iter())
             .map(|(x, y)| -> Complex<f64> { x * y })
             .fold(Complex::new(0.0, 0.0), |acc, x| -> Complex<f64> { acc + x })
+    }
+
+    pub fn proj(&self, other: &Vector) -> Complex<f64> {
+        other.dot(self) / other.dot(other)
+    }
+
+    pub fn l2(&self) -> Complex<f64> {
+        self.dot(self).sqrt()
     }
 }
 
@@ -84,7 +92,7 @@ impl Matrix {
             .collect()
     }
 
-    pub fn transpose(&self) -> Matrix {
+    pub fn transpose(self) -> Matrix {
         Matrix::from_row_vecs(self.to_col_vecs())
     }
 
@@ -97,6 +105,49 @@ impl Matrix {
                 if (self.data[y * self.width + x] - other.data[y * self.width + x]).norm_sqr()
                     > tolerance
                 {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    pub fn qr_decomp(self) -> (Matrix, Matrix) {
+        assert_eq!(self.width, self.height);
+
+        let cols = self.to_col_vecs();
+        let mut triangle_matrix: Vec<Vector> = Vec::with_capacity(self.width);
+        let mut orthogonal_matrix: Vec<Vector> = Vec::with_capacity(self.width);
+        for mut col in cols.into_iter() {
+            let mut triangle_row: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); self.width];
+            let mut i: usize = 0;
+            for basis in orthogonal_matrix.iter() {
+                let coefficient = col.proj(basis);
+                col = col - coefficient * basis.clone();
+                triangle_row[i] = coefficient;
+                i += 1;
+            }
+            let coefficient = col.l2();
+            triangle_row[i] = coefficient;
+            let new_basis = (Complex::new(1.0, 0.0) / coefficient) * col;
+            triangle_matrix.push(triangle_row.into());
+            orthogonal_matrix.push(new_basis);
+        }
+
+        (
+            Matrix::from_row_vecs(orthogonal_matrix).transpose(),
+            Matrix::from_row_vecs(triangle_matrix).transpose(),
+        )
+    }
+
+    pub fn is_triangular(&self, tolerance: f64) -> bool {
+        if self.width != self.height {
+            return false;
+        }
+
+        for y in 0..self.height {
+            for x in 0..y {
+                if self.data[y * self.width + x].norm_sqr() > tolerance {
                     return false;
                 }
             }
@@ -129,13 +180,25 @@ impl ops::Add<Vector> for Vector {
     }
 }
 
+impl ops::Mul<Vector> for Complex<f64> {
+    type Output = Vector;
+
+    fn mul(self, rhs: Vector) -> Self::Output {
+        rhs.0
+            .into_iter()
+            .map(|x| -> Complex<f64> { self * x })
+            .collect::<Vec<_>>()
+            .into()
+    }
+}
+
 impl ops::Mul<Vector> for Matrix {
     type Output = Vector;
 
     fn mul(self, rhs: Vector) -> Self::Output {
         self.to_row_vecs()
             .into_iter()
-            .map(|row| -> Complex<f64> { row.dot(rhs.clone()) })
+            .map(|row| -> Complex<f64> { row.dot(&rhs) })
             .collect::<Vec<_>>()
             .into()
     }
@@ -153,8 +216,8 @@ impl ops::Mul<Matrix> for Matrix {
         let mut ret: Vec<Vector> = Vec::with_capacity(lhs.len());
         for row in lhs.into_iter() {
             let mut out_row: Vec<Complex<f64>> = Vec::with_capacity(rhs.len());
-            for col in rhs.clone().into_iter() {
-                out_row.push(col.dot(row.clone()))
+            for col in rhs.iter() {
+                out_row.push(col.dot(&row))
             }
             ret.push(out_row.into());
         }
@@ -183,7 +246,7 @@ mod tests {
             test1,
             add
         );
-        let dot = test1.clone().dot(test1);
+        let dot = test1.dot(&test1);
         assert!(
             (dot - Complex::new(8.0, 0.0)).norm_sqr() <= 1E-10,
             "Error computing dot product!\nExpected: {:?}\nActual: {:?}",
@@ -242,6 +305,33 @@ mod tests {
             "Error in matix multiplication!\nExpected: {:?}\nActual: {:?}",
             expected,
             actual
+        );
+    }
+
+    #[test]
+    fn test_qr() {
+        let lhs = Matrix::from_row_vecs(vec![
+            vec![Complex::new(0.77551606, 0.0), Complex::new(0.19238363, 0.0)].into(),
+            vec![Complex::new(0.1340687, 0.0), Complex::new(0.53814676, 0.0)].into(),
+        ]);
+        let (actual_q, actual_r) = lhs.qr_decomp();
+        let q_cols = actual_q.to_col_vecs();
+        let q_dot = q_cols[0].dot(&q_cols[1]);
+        assert!(
+            q_dot.norm_sqr() < 1E-10,
+            "Error in QR decomp! Q matrix is not orthogonal. Q matrix: {:?}",
+            actual_q
+        );
+        assert!(
+            (q_cols[0].l2().norm_sqr() - 1.0).abs() < 1E-10
+                || (q_cols[1].l2().norm_sqr() - 1.0).abs() < 1E-10,
+            "Error in QR decomp! Q matrix is not normalized. Q matrix: {:?}",
+            actual_q
+        );
+        assert!(
+            actual_r.is_triangular(1E-10),
+            "Error in QR decomp! R matrix is not triangular. R matrix: {:?}",
+            actual_r
         );
     }
 }
