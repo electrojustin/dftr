@@ -74,7 +74,7 @@ impl Matrix {
     pub fn to_row_vecs(&self) -> Vec<Vector> {
         (0..self.height)
             .map(|y| -> Vector {
-                self.data[y * self.height..(y + 1) * self.height]
+                self.data[y * self.width..(y + 1) * self.width]
                     .to_vec()
                     .into()
             })
@@ -85,7 +85,7 @@ impl Matrix {
         (0..self.width)
             .map(|x| -> Vector {
                 (0..self.height)
-                    .map(|y| -> Complex<f64> { self.data[y * self.height + x] })
+                    .map(|y| -> Complex<f64> { self.data[y * self.width + x] })
                     .collect::<Vec<_>>()
                     .into()
             })
@@ -153,6 +153,45 @@ impl Matrix {
             }
         }
         true
+    }
+
+    pub fn row_echelon(&self, augmentation: &Matrix, zero_threshold: f64) -> (Matrix, Matrix) {
+        assert_eq!(self.height, augmentation.height);
+
+        let mut lhs_rows = self.to_row_vecs();
+        let mut rhs_rows = augmentation.to_row_vecs();
+        for y in 0..self.height {
+            let offset = 'find_offset: {
+                for x in y..self.width {
+                    for y2 in y..self.height {
+                        if lhs_rows[y2].0[x].norm_sqr() > zero_threshold {
+                            // Swap rows so the current row has the furthest left non-zero element.
+                            if y2 != y {
+                                lhs_rows.swap(y, y2);
+                                rhs_rows.swap(y, y2);
+                            }
+                            break 'find_offset Some(x);
+                        }
+                    }
+                }
+                None
+            };
+            if let Some(x) = offset {
+                let coefficient = Complex::new(1.0, 0.0) / lhs_rows[y].0[x];
+                lhs_rows[y] = coefficient * lhs_rows[y].clone();
+                rhs_rows[y] = coefficient * rhs_rows[y].clone();
+                for y2 in (y + 1)..self.height {
+                    let coefficient = lhs_rows[y2].0[x];
+                    lhs_rows[y2] = lhs_rows[y2].clone() - coefficient * lhs_rows[y].clone();
+                    rhs_rows[y2] = rhs_rows[y2].clone() - coefficient * rhs_rows[y].clone();
+                }
+            }
+        }
+
+        (
+            Matrix::from_row_vecs(lhs_rows),
+            Matrix::from_row_vecs(rhs_rows),
+        )
     }
 }
 
@@ -314,7 +353,7 @@ mod tests {
             vec![Complex::new(0.77551606, 0.0), Complex::new(0.19238363, 0.0)].into(),
             vec![Complex::new(0.1340687, 0.0), Complex::new(0.53814676, 0.0)].into(),
         ]);
-        let (actual_q, actual_r) = lhs.qr_decomp();
+        let (actual_q, actual_r) = lhs.clone().qr_decomp();
         let q_cols = actual_q.to_col_vecs();
         let q_dot = q_cols[0].dot(&q_cols[1]);
         assert!(
@@ -332,6 +371,75 @@ mod tests {
             actual_r.is_triangular(1E-10),
             "Error in QR decomp! R matrix is not triangular. R matrix: {:?}",
             actual_r
+        );
+        let reconstructed = actual_q * actual_r;
+        assert!(
+            lhs.compare(&reconstructed, 1E-10),
+            "Error in QR decomp! A != QR.\nExpected: {:?}\nActual: {:?}",
+            lhs,
+            reconstructed,
+        );
+    }
+
+    #[test]
+    fn test_row_echelon() {
+        let lhs = Matrix::from_row_vecs(vec![
+            vec![
+                Complex::new(1.0, 0.0),
+                Complex::new(3.0, 0.0),
+                Complex::new(1.0, 0.0),
+                Complex::new(9.0, 0.0),
+            ]
+            .into(),
+            vec![
+                Complex::new(1.0, 0.0),
+                Complex::new(1.0, 0.0),
+                Complex::new(-1.0, 0.0),
+                Complex::new(1.0, 0.0),
+            ]
+            .into(),
+            vec![
+                Complex::new(3.0, 0.0),
+                Complex::new(11.0, 0.0),
+                Complex::new(5.0, 0.0),
+                Complex::new(35.0, 0.0),
+            ]
+            .into(),
+        ]);
+        let rhs = Matrix::from_row_vecs(vec![
+            vec![Complex::new(0.0, 0.0)].into(),
+            vec![Complex::new(0.0, 0.0)].into(),
+            vec![Complex::new(0.0, 0.0)].into(),
+        ]);
+        let expected = Matrix::from_row_vecs(vec![
+            vec![
+                Complex::new(1.0, 0.0),
+                Complex::new(3.0, 0.0),
+                Complex::new(1.0, 0.0),
+                Complex::new(9.0, 0.0),
+            ]
+            .into(),
+            vec![
+                Complex::new(0.0, 0.0),
+                Complex::new(1.0, 0.0),
+                Complex::new(1.0, 0.0),
+                Complex::new(4.0, 0.0),
+            ]
+            .into(),
+            vec![
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+            ]
+            .into(),
+        ]);
+        let (actual, _) = lhs.row_echelon(&rhs, 1E-10);
+        assert!(
+            actual.compare(&expected, 1E-10),
+            "Error in row echelon!\nExpected: {:?}\nActual: {:?}",
+            expected,
+            actual,
         );
     }
 }
