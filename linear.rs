@@ -71,6 +71,24 @@ impl Matrix {
         }
     }
 
+    pub fn from_diagonal(diag: Vec<Complex<f64>>) -> Self {
+        let width = diag.len();
+        let mut data: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); width * width];
+        for i in 0..diag.len() {
+            data[i * width + i] = diag[i];
+        }
+
+        Matrix {
+            data,
+            width,
+            height: width,
+        }
+    }
+
+    pub fn identity(dim: usize) -> Self {
+        Matrix::from_diagonal(vec![Complex::new(1.0, 0.0); dim])
+    }
+
     pub fn to_row_vecs(&self) -> Vec<Vector> {
         (0..self.height)
             .map(|y| -> Vector {
@@ -192,6 +210,25 @@ impl Matrix {
             Matrix::from_row_vecs(lhs_rows),
             Matrix::from_row_vecs(rhs_rows),
         )
+    }
+
+    pub fn inverse(&self, zero_threshold: f64) -> Matrix {
+        assert_eq!(self.width, self.height);
+
+        let (lhs, rhs) = self.row_echelon(&Matrix::identity(self.width), zero_threshold);
+
+        let mut lhs_rows = lhs.to_row_vecs();
+        let mut rhs_rows = rhs.to_row_vecs();
+        for i in 0..(self.height - 1) {
+            let y = self.height - 1 - i;
+            for y2 in 0..y {
+                let coefficient = lhs_rows[y2].0[y];
+                lhs_rows[y2] = lhs_rows[y2].clone() - coefficient * lhs_rows[y].clone();
+                rhs_rows[y2] = rhs_rows[y2].clone() - coefficient * rhs_rows[y].clone();
+            }
+        }
+
+        Matrix::from_row_vecs(rhs_rows)
     }
 }
 
@@ -438,6 +475,25 @@ mod tests {
         assert!(
             actual.compare(&expected, 1E-10),
             "Error in row echelon!\nExpected: {:?}\nActual: {:?}",
+            expected,
+            actual,
+        );
+    }
+
+    #[test]
+    fn test_inverse() {
+        let input = Matrix::from_row_vecs(vec![
+            vec![Complex::new(-1.0, 0.0), Complex::new(1.5, 0.0)].into(),
+            vec![Complex::new(1.0, 0.0), Complex::new(-1.0, 0.0)].into(),
+        ]);
+        let expected = Matrix::from_row_vecs(vec![
+            vec![Complex::new(2.0, 0.0), Complex::new(3.0, 0.0)].into(),
+            vec![Complex::new(2.0, 0.0), Complex::new(2.0, 0.0)].into(),
+        ]);
+        let actual = input.inverse(1E-10);
+        assert!(
+            actual.compare(&expected, 1E-10),
+            "Error in inverse!\nExpected: {:?}\nActual: {:?}",
             expected,
             actual,
         );
