@@ -32,6 +32,15 @@ impl Vector {
     pub fn l2(&self) -> Complex<f64> {
         self.dot(self).sqrt()
     }
+
+    pub fn is_zero(&self, zero_threshold: f64) -> bool {
+        for element in self.0.iter() {
+            if element.norm_sqr() > zero_threshold {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 impl From<Vec<Complex<f64>>> for Vector {
@@ -173,7 +182,7 @@ impl Matrix {
         true
     }
 
-    pub fn row_echelon(&self, augmentation: &Matrix, zero_threshold: f64) -> (Matrix, Matrix) {
+    fn row_echelon(&self, augmentation: &Matrix, zero_threshold: f64) -> (Matrix, Matrix) {
         assert_eq!(self.height, augmentation.height);
 
         let mut lhs_rows = self.to_row_vecs();
@@ -212,15 +221,16 @@ impl Matrix {
         )
     }
 
-    pub fn inverse(&self, zero_threshold: f64) -> Matrix {
+    pub fn inverse(self, zero_threshold: f64) -> Matrix {
         assert_eq!(self.width, self.height);
 
+        let height = self.height;
         let (lhs, rhs) = self.row_echelon(&Matrix::identity(self.width), zero_threshold);
 
         let mut lhs_rows = lhs.to_row_vecs();
         let mut rhs_rows = rhs.to_row_vecs();
-        for i in 0..(self.height - 1) {
-            let y = self.height - 1 - i;
+        for i in 0..height {
+            let y = height - 1 - i;
             for y2 in 0..y {
                 let coefficient = lhs_rows[y2].0[y];
                 lhs_rows[y2] = lhs_rows[y2].clone() - coefficient * lhs_rows[y].clone();
@@ -229,6 +239,22 @@ impl Matrix {
         }
 
         Matrix::from_row_vecs(rhs_rows)
+    }
+
+    pub fn kernel(&self, zero_threshold: f64) -> Vec<Vector> {
+        let transpose_self = self.clone().transpose();
+        let (lhs, rhs) = transpose_self.row_echelon(&Matrix::identity(self.width), zero_threshold);
+        let lhs_rows = lhs.to_row_vecs();
+        let rhs_rows = rhs.to_row_vecs();
+        zip(lhs_rows.into_iter(), rhs_rows.into_iter())
+            .filter_map(|(l, r)| {
+                if l.is_zero(zero_threshold) {
+                    Some(r)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
@@ -496,6 +522,89 @@ mod tests {
             "Error in inverse!\nExpected: {:?}\nActual: {:?}",
             expected,
             actual,
+        );
+    }
+
+    #[test]
+    fn test_kernel() {
+        let input = Matrix::from_row_vecs(vec![
+            vec![
+                Complex::new(1.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(-3.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(2.0, 0.0),
+                Complex::new(-8.0, 0.0),
+            ]
+            .into(),
+            vec![
+                Complex::new(0.0, 0.0),
+                Complex::new(1.0, 0.0),
+                Complex::new(5.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(-1.0, 0.0),
+                Complex::new(4.0, 0.0),
+            ]
+            .into(),
+            vec![
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(1.0, 0.0),
+                Complex::new(7.0, 0.0),
+                Complex::new(-9.0, 0.0),
+            ]
+            .into(),
+            vec![
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+            ]
+            .into(),
+        ]);
+        let expected = vec![
+            Vector::from(vec![
+                Complex::new(3.0, 0.0),
+                Complex::new(-5.0, 0.0),
+                Complex::new(1.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(0.0, 0.0),
+            ]),
+            Vector::from(vec![
+                Complex::new(-2.0, 0.0),
+                Complex::new(1.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(-7.0, 0.0),
+                Complex::new(1.0, 0.0),
+                Complex::new(0.0, 0.0),
+            ]),
+            Vector::from(vec![
+                Complex::new(8.0, 0.0),
+                Complex::new(-4.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(9.0, 0.0),
+                Complex::new(0.0, 0.0),
+                Complex::new(1.0, 0.0),
+            ]),
+        ];
+        let actual = input.kernel(1E-10);
+        let mut is_correct = expected.len() == actual.len();
+        if is_correct {
+            for i in 0..expected.len() {
+                if !actual[i].compare(&expected[i], 1E-10) {
+                    is_correct = false;
+                    break;
+                }
+            }
+        }
+        assert!(
+            is_correct,
+            "Error in kernel space!\nExpected: {:?}\nActual: {:?}",
+            expected, actual
         );
     }
 }
