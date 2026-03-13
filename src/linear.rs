@@ -7,6 +7,8 @@ use num::complex::Complex;
 pub struct Vector(Vec<Complex<f64>>);
 
 impl Vector {
+    // Compare two vectors, returning true if each element is equal to within the specified
+    // tolerance.
     pub fn compare(&self, other: &Vector, tolerance: f64) -> bool {
         if self.0.len() != other.0.len() {
             return false;
@@ -19,20 +21,24 @@ impl Vector {
         true
     }
 
+    // Compute dot product of two vectors.
     pub fn dot(&self, other: &Vector) -> Complex<f64> {
         zip(self.0.iter(), other.0.iter())
             .map(|(x, y)| -> Complex<f64> { x * y })
             .fold(Complex::new(0.0, 0.0), |acc, x| -> Complex<f64> { acc + x })
     }
 
+    // Project one vector onto another, i.e. A.B / B.B
     pub fn proj(&self, other: &Vector) -> Complex<f64> {
         other.dot(self) / other.dot(other)
     }
 
+    // L2 (Euclidean) norm.
     pub fn l2(&self) -> Complex<f64> {
         self.dot(self).sqrt()
     }
 
+    // Special case of compare() for checking if a vector is the zero vector.
     pub fn is_zero(&self, zero_threshold: f64) -> bool {
         for element in self.0.iter() {
             if element.norm_sqr() > zero_threshold {
@@ -57,6 +63,7 @@ pub struct Matrix {
 }
 
 impl Matrix {
+    // Construct a matrix from its rows.
     pub fn from_row_vecs(rows: Vec<Vector>) -> Self {
         assert!(
             rows.len() != 0,
@@ -80,6 +87,7 @@ impl Matrix {
         }
     }
 
+    // Construct a diagonal matrix with the specified entries on its diagonal.
     pub fn from_diagonal(diag: Vec<Complex<f64>>) -> Self {
         let width = diag.len();
         let mut data: Vec<Complex<f64>> = vec![Complex::new(0.0, 0.0); width * width];
@@ -94,10 +102,12 @@ impl Matrix {
         }
     }
 
+    // Special case of a diagonal matrix where the entries are all the same value.
     pub fn identity(x: Complex<f64>, dim: usize) -> Self {
         Matrix::from_diagonal(vec![x; dim])
     }
 
+    // Row view of the matrix.
     pub fn to_row_vecs(&self) -> Vec<Vector> {
         (0..self.height)
             .map(|y| -> Vector {
@@ -108,6 +118,7 @@ impl Matrix {
             .collect()
     }
 
+    // Column view of the matrix.
     pub fn to_col_vecs(&self) -> Vec<Vector> {
         (0..self.width)
             .map(|x| -> Vector {
@@ -119,10 +130,13 @@ impl Matrix {
             .collect()
     }
 
+    // Compute the transpose of the matrix.
     pub fn transpose(self) -> Matrix {
         Matrix::from_row_vecs(self.to_col_vecs())
     }
 
+    // Compare two matrices, returning true if each element is equal to within the specified
+    // tolerance.   
     pub fn compare(&self, other: &Matrix, tolerance: f64) -> bool {
         if self.width != other.width || self.height != other.height {
             return false;
@@ -139,6 +153,7 @@ impl Matrix {
         true
     }
 
+    // Orthonormal decomposition via the Gram-Schmidt algorithm.
     pub fn qr_decomp(self) -> (Matrix, Matrix) {
         assert_eq!(self.width, self.height);
 
@@ -167,6 +182,8 @@ impl Matrix {
         )
     }
 
+    // Returns true if a matrix is upper triangular, that is, the lower left triangle of the matrix
+    // contains entries that are all zero to within the specified tolerance.
     pub fn is_triangular(&self, tolerance: f64) -> bool {
         if self.width != self.height {
             return false;
@@ -182,6 +199,7 @@ impl Matrix {
         true
     }
 
+    // Basic Gaussian elimination algorithm.
     fn row_echelon(&self, augmentation: &Matrix, zero_threshold: f64) -> (Matrix, Matrix) {
         assert_eq!(self.height, augmentation.height);
 
@@ -221,6 +239,7 @@ impl Matrix {
         )
     }
 
+    // Compute the inverse of the matrix using Gaussian elimination.
     pub fn inverse(self, zero_threshold: f64) -> Matrix {
         assert_eq!(self.width, self.height);
 
@@ -244,6 +263,7 @@ impl Matrix {
         Matrix::from_row_vecs(rhs_rows)
     }
 
+    // Compute the kernel (null space) of the matrix using Gaussian elimination.
     pub fn kernel(&self, zero_threshold: f64) -> Vec<Vector> {
         let transpose_self = self.clone().transpose();
         let (lhs, rhs) = transpose_self.row_echelon(
@@ -263,6 +283,7 @@ impl Matrix {
             .collect()
     }
 
+    // Implementation of Eigendecomposition by QR algorithm.
     pub fn eigen(&self, zero_threshold: f64, max_iters: usize) -> (Vec<Complex<f64>>, Vec<Vector>) {
         assert_eq!(self.width, self.height);
 
@@ -272,10 +293,14 @@ impl Matrix {
             if i == max_iters {
                 return (vec![], vec![]);
             }
+            // The eigenvalues of triangular matrices are the diagonal.
             if similar_matrix.is_triangular(zero_threshold) {
                 break;
             }
 
+            // Iteratively transform the given matrix into a triangular similar matrix.
+            // For a given matrix A = QR, B = RQ is similar to A, which means it has the same
+            // eigenvalues.
             let (q, r) = similar_matrix.clone().qr_decomp();
             similar_matrix = r * q;
             i += 1;
@@ -289,6 +314,10 @@ impl Matrix {
             }
         }
 
+        // Now that we have the eigenvalues for the matrix, we can find the eigenvectors by solving
+        // the equation (A - lambda * I) * x = 0, where A is the original matrix, lambda is an
+        // eigenvalue. The non-zero vectors x which satisfy this equation, i.e. the null space of
+        // (A - lambda * I), are the eigenvectors.
         let mut eigenvectors: Vec<Vector> = Vec::new();
         for eigenval in eigenvalues.iter() {
             let char_matrix = self.clone() - Matrix::identity(*eigenval, self.width);
