@@ -94,8 +94,8 @@ impl Matrix {
         }
     }
 
-    pub fn identity(dim: usize) -> Self {
-        Matrix::from_diagonal(vec![Complex::new(1.0, 0.0); dim])
+    pub fn identity(x: Complex<f64>, dim: usize) -> Self {
+        Matrix::from_diagonal(vec![x; dim])
     }
 
     pub fn to_row_vecs(&self) -> Vec<Vector> {
@@ -225,7 +225,10 @@ impl Matrix {
         assert_eq!(self.width, self.height);
 
         let height = self.height;
-        let (lhs, rhs) = self.row_echelon(&Matrix::identity(self.width), zero_threshold);
+        let (lhs, rhs) = self.row_echelon(
+            &Matrix::identity(Complex::new(1.0, 0.0), self.width),
+            zero_threshold,
+        );
 
         let mut lhs_rows = lhs.to_row_vecs();
         let mut rhs_rows = rhs.to_row_vecs();
@@ -243,7 +246,10 @@ impl Matrix {
 
     pub fn kernel(&self, zero_threshold: f64) -> Vec<Vector> {
         let transpose_self = self.clone().transpose();
-        let (lhs, rhs) = transpose_self.row_echelon(&Matrix::identity(self.width), zero_threshold);
+        let (lhs, rhs) = transpose_self.row_echelon(
+            &Matrix::identity(Complex::new(1.0, 0.0), self.width),
+            zero_threshold,
+        );
         let lhs_rows = lhs.to_row_vecs();
         let rhs_rows = rhs.to_row_vecs();
         zip(lhs_rows.into_iter(), rhs_rows.into_iter())
@@ -255,6 +261,41 @@ impl Matrix {
                 }
             })
             .collect()
+    }
+
+    pub fn eigen(&self, zero_threshold: f64, max_iters: usize) -> (Vec<Complex<f64>>, Vec<Vector>) {
+        assert_eq!(self.width, self.height);
+
+        let mut similar_matrix = self.clone();
+        let mut i = 0;
+        loop {
+            if i == max_iters {
+                return (vec![], vec![]);
+            }
+            if similar_matrix.is_triangular(zero_threshold) {
+                break;
+            }
+
+            let (q, r) = similar_matrix.clone().qr_decomp();
+            similar_matrix = r * q;
+            i += 1;
+        }
+
+        let mut eigenvalues: Vec<Complex<f64>> = Vec::new();
+        for i in 0..self.width {
+            let diag_val = similar_matrix.data[i * self.width + i];
+            if diag_val.norm_sqr() > zero_threshold {
+                eigenvalues.push(diag_val);
+            }
+        }
+
+        let mut eigenvectors: Vec<Vector> = Vec::new();
+        for eigenval in eigenvalues.iter() {
+            let char_matrix = self.clone() - Matrix::identity(*eigenval, self.width);
+            eigenvectors.append(&mut char_matrix.kernel(zero_threshold));
+        }
+
+        (eigenvalues, eigenvectors)
     }
 }
 
@@ -324,6 +365,25 @@ impl ops::Mul<Matrix> for Matrix {
             ret.push(out_row.into());
         }
         Matrix::from_row_vecs(ret)
+    }
+}
+
+impl ops::Sub<Matrix> for Matrix {
+    type Output = Matrix;
+
+    fn sub(self, rhs: Matrix) -> Self::Output {
+        assert_eq!(self.width, rhs.width);
+        assert_eq!(self.height, rhs.height);
+
+        let width = self.width;
+        let height = self.height;
+        Self {
+            data: zip(self.data.into_iter(), rhs.data.into_iter())
+                .map(|(x, y)| -> Complex<f64> { x - y })
+                .collect(),
+            width,
+            height,
+        }
     }
 }
 
@@ -605,6 +665,34 @@ mod tests {
             is_correct,
             "Error in kernel space!\nExpected: {:?}\nActual: {:?}",
             expected, actual
+        );
+    }
+
+    #[test]
+    fn test_eigen() {
+        let input = Matrix::from_row_vecs(vec![
+            vec![Complex::new(1.0, 0.0), Complex::new(0.0, 0.0)].into(),
+            vec![Complex::new(1.0, 0.0), Complex::new(3.0, 0.0)].into(),
+        ]);
+        let expected_eigenvals = vec![Complex::new(3.0, 0.0), Complex::new(1.0, 0.0)];
+        let expected_eigenvecs = vec![
+            Vector::from(vec![Complex::new(0.0, 0.0), Complex::new(1.0, 0.0)]),
+            Vector::from(vec![Complex::new(-2.0, 0.0), Complex::new(1.0, 0.0)]),
+        ];
+        let (actual_eigenvals, actual_eigenvecs) = input.eigen(1E-10, 1000);
+        let is_correct = Vector::from(expected_eigenvals.clone())
+            .compare(&Vector::from(actual_eigenvals.clone()), 1E-10);
+        assert!(
+            is_correct,
+            "Error in eigen: incorrect eigenvalues!\nExpected: {:?}\nActual: {:?}",
+            expected_eigenvals, actual_eigenvals
+        );
+        let is_correct = Matrix::from_row_vecs(expected_eigenvecs.clone())
+            .compare(&Matrix::from_row_vecs(actual_eigenvecs.clone()), 1E-10);
+        assert!(
+            is_correct,
+            "Error in eigen: incorrect eigenvecs!\nExpected: {:?}\nActual: {:?}",
+            expected_eigenvecs, actual_eigenvecs
         );
     }
 }
