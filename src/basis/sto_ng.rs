@@ -74,7 +74,7 @@ mod tests {
     use super::*;
     use crate::basis::gaussian_type_orbital::GTO;
     use crate::basis::Basis;
-    use crate::functional::lda::x_alpha_functional;
+    use crate::functional::lda::lda_functional;
     use crate::functional::repulsion_potential_functional;
     use crate::grid::GridConfig;
     use crate::nucleus::nuclear_potential;
@@ -87,87 +87,19 @@ mod tests {
         end_x: 3.0,
         end_y: 3.0,
         end_z: 3.0,
-        width_voxels: 64,
-        height_voxels: 64,
-        depth_voxels: 64,
+        width_voxels: 32,
+        height_voxels: 32,
+        depth_voxels: 32,
     };
 
-    // X-Alpha exchange is a poor approximation, and monoatomic hydrogen isn't a good fit for
-    // DFT anyway, so we expect our values to not be super accurate.
+    // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
     #[test]
-    fn test_hydrogen_sto2g() {
+    fn test_helium_sto2g() {
         let mut test = STONG::sto_2g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
         let bra = test.bra(K_GRID_CONFIG);
         let ket = test.ket(K_GRID_CONFIG);
         let ke = test.kinetic_energy(K_GRID_CONFIG);
-        let electron_density = bra.clone() * ket.clone();
-        let repulsion_pe = repulsion_potential_functional(electron_density.clone());
-        let nuclear_pe = nuclear_potential(
-            &vec![Nucleus {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-                charge: 1.0,
-            }],
-            K_GRID_CONFIG,
-        );
-        let exchange = x_alpha_functional(electron_density);
-        let hamiltonian = ((bra.clone() * ke.clone()).integrate()
-            + (bra.clone() * nuclear_pe * ket.clone()).integrate()
-            + (bra * repulsion_pe * ket).integrate()
-            + exchange.integrate())
-        .re;
-
-        assert!(
-            (hamiltonian - -0.5).abs() < 0.1,
-            "Incorrect hydrogen atom energy! Expected {} Actual {}",
-            -0.5,
-            hamiltonian
-        );
-    }
-
-    #[test]
-    fn test_hydrogen_sto3g() {
-        let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
-        let bra = test.bra(K_GRID_CONFIG);
-        let ket = test.ket(K_GRID_CONFIG);
-        let ke = test.kinetic_energy(K_GRID_CONFIG);
-        let electron_density = bra.clone() * ket.clone();
-        let repulsion_pe = repulsion_potential_functional(electron_density.clone());
-        let nuclear_pe = nuclear_potential(
-            &vec![Nucleus {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-                charge: 1.0,
-            }],
-            K_GRID_CONFIG,
-        );
-        let exchange = x_alpha_functional(electron_density);
-        let hamiltonian = ((bra.clone() * ke.clone()).integrate()
-            + (bra.clone() * nuclear_pe * ket.clone()).integrate()
-            + (bra * repulsion_pe * ket).integrate()
-            + exchange.integrate())
-        .re;
-
-        assert!(
-            (hamiltonian - -0.5).abs() < 0.1,
-            "Incorrect hydrogen atom energy! Expected {} Actual {}",
-            -0.5,
-            hamiltonian
-        );
-    }
-
-    // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
-    // TODO: Something seems off here, we're further off from the experimental values than
-    // literature indicates we should be.
-    #[test]
-    fn test_helium_sto3g() {
-        let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
-        let bra = test.bra(K_GRID_CONFIG);
-        let ket = test.ket(K_GRID_CONFIG);
-        let ke = test.kinetic_energy(K_GRID_CONFIG);
-        let electron_density = bra.clone() * ket.clone();
+        let electron_density = Complex::new(2.0, 0.0) * bra.clone() * ket.clone();
         let repulsion_pe = repulsion_potential_functional(electron_density.clone());
         let nuclear_pe = nuclear_potential(
             &vec![Nucleus {
@@ -178,17 +110,50 @@ mod tests {
             }],
             K_GRID_CONFIG,
         );
-        let exchange = x_alpha_functional(electron_density).integrate();
+        let exchange = lda_functional(electron_density, 1.05 * 2.0 / 3.0).integrate();
         let ke = Complex::new(2.0, 0.0) * (bra.clone() * ke.clone()).integrate();
         let nuclear_pe =
             Complex::new(2.0, 0.0) * (bra.clone() * nuclear_pe * ket.clone()).integrate();
-        let repulsion_pe = Complex::new(2.0, 0.0) * (bra * repulsion_pe * ket).integrate();
-        //println!("{:?} {:?} {:?} {:?}", ke, nuclear_pe, repulsion_pe, exchange);
+        let repulsion_pe = Complex::new(0.5, 0.0) * (bra * repulsion_pe * ket).integrate();
 
         let hamiltonian = ke + nuclear_pe + repulsion_pe + exchange;
         let expected = -2.9034;
         assert!(
-            (hamiltonian.re - expected).abs() < 0.7,
+            (hamiltonian.re - expected).abs() < 0.2,
+            "Incorrect helium atom energy! Expected {} Actual {}",
+            expected,
+            hamiltonian
+        );
+    }
+
+    // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
+    #[test]
+    fn test_helium_sto3g() {
+        let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
+        let bra = test.bra(K_GRID_CONFIG);
+        let ket = test.ket(K_GRID_CONFIG);
+        let ke = test.kinetic_energy(K_GRID_CONFIG);
+        let electron_density = Complex::new(2.0, 0.0) * bra.clone() * ket.clone();
+        let repulsion_pe = repulsion_potential_functional(electron_density.clone());
+        let nuclear_pe = nuclear_potential(
+            &vec![Nucleus {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                charge: 2.0,
+            }],
+            K_GRID_CONFIG,
+        );
+        let exchange = lda_functional(electron_density, 1.05 * 2.0 / 3.0).integrate();
+        let ke = Complex::new(2.0, 0.0) * (bra.clone() * ke.clone()).integrate();
+        let nuclear_pe =
+            Complex::new(2.0, 0.0) * (bra.clone() * nuclear_pe * ket.clone()).integrate();
+        let repulsion_pe = Complex::new(0.5, 0.0) * (bra * repulsion_pe * ket).integrate();
+
+        let hamiltonian = ke + nuclear_pe + repulsion_pe + exchange;
+        let expected = -2.9034;
+        assert!(
+            (hamiltonian.re - expected).abs() < 0.1,
             "Incorrect helium atom energy! Expected {} Actual {}",
             expected,
             hamiltonian

@@ -2,20 +2,15 @@ use num::Complex;
 
 use crate::grid::Grid;
 
-pub fn x_alpha_functional(mut electron_density: Grid) -> Grid {
-    // The "0.2" term is a complete mystery to me. I just happened to notice all of our math was
-    // off by exactly a factor of 5.
-    electron_density.map(&|_x, _y, _z, val| -> Complex<f64> {
+pub fn lda_functional(electron_density: Grid, alpha: f64) -> Grid {
+    let mut exchange_density = electron_density.clone();
+    exchange_density.map(&|_x, _y, _z, val| -> Complex<f64> {
         Complex::new(
-            0.2 * -1.05
-                * 0.75
-                * (3.0 / std::f64::consts::PI).powf(1.0 / 3.0)
-                * 4.0
-                * std::f64::consts::PI,
+            -9.0 / 8.0 * alpha * (3.0 / std::f64::consts::PI).powf(1.0 / 3.0),
             0.0,
         ) * val.powf(4.0 / 3.0)
     });
-    electron_density
+    exchange_density
 }
 
 mod tests {
@@ -31,24 +26,24 @@ mod tests {
         end_x: 3.0,
         end_y: 3.0,
         end_z: 3.0,
-        width_voxels: 128,
-        height_voxels: 128,
-        depth_voxels: 128,
+        width_voxels: 32,
+        height_voxels: 32,
+        depth_voxels: 32,
     };
 
     // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
     #[test]
-    fn test_hydrogen_x_alpha() {
+    fn test_helium_lda() {
         let alpha = 1.0;
         let mut test_gto = GTO::new(0.0, 0.0, 0.0, alpha, 0, 0, 0);
         let bra = test_gto.bra(K_GRID_CONFIG);
         let ket = test_gto.ket(K_GRID_CONFIG);
-        let electron_density = bra.clone() * ket.clone();
-        let exchange = x_alpha_functional(electron_density);
+        let electron_density = Complex::new(2.0, 0.0) * bra.clone() * ket.clone();
+        let exchange = lda_functional(electron_density, 1.05 * 2.0 / 3.0);
         let integral = exchange.integrate().re;
         let expected = -1.013 * alpha.sqrt();
         assert!(
-            (integral - expected).abs() < 0.01,
+            (integral - expected).abs() < 0.001,
             "Incorrect GTO X-alpha energy! Expected {} Actual {}",
             expected,
             integral

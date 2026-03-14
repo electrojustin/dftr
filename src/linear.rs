@@ -136,7 +136,7 @@ impl Matrix {
     }
 
     // Compare two matrices, returning true if each element is equal to within the specified
-    // tolerance.   
+    // tolerance.
     pub fn compare(&self, other: &Matrix, tolerance: f64) -> bool {
         if self.width != other.width || self.height != other.height {
             return false;
