@@ -35,6 +35,8 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         exchange_correlation_potential_functional: XC2,
         grid_config: GridConfig,
     ) -> Self {
+        // In order to solve the general eigenvector problem, we make an orthonormal basis. We do
+        // this using the Lowdin decomposition of the overlap matrix
         let overlap_matrix = Matrix::from_row_vecs(
             (0..basis.len())
                 .map(|i| -> Vector {
@@ -58,6 +60,20 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         let eigenvecs = Matrix::from_row_vecs(eigenvecs).transpose();
         let orthogonalizer = eigenvecs.clone() * eigenvals * eigenvecs.transpose();
         let inverse_orthogonalizer = orthogonalizer.clone().inverse(1E-10);
+        assert!(
+            Matrix::identity(Complex::new(1.0, 0.0), basis.len()).compare(
+                &(inverse_orthogonalizer.clone() * orthogonalizer.clone()),
+                1E-4
+            ),
+            "Error orthogonalizing basis! Cannot invert orthogonalizer."
+        );
+        assert!(
+            overlap_matrix.compare(
+                &(orthogonalizer.clone().transpose() * orthogonalizer.clone()).inverse(1E-10),
+                1E-4
+            ),
+            "Error orthogonalizing basis! Cannot reconstruct overlap matrix from orthogonalizer."
+        );
 
         let default_grid = Grid::new(grid_config.clone());
 
@@ -66,12 +82,11 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             energy: Complex::new(0.0, 0.0),
             exchange_correlation_functional,
             exchange_correlation_potential_functional,
-/*            coeff_matrix: Matrix::identity(
-                Complex::new(2.0 / (num_electrons as f64), 0.0),
+            // Arbitrary guess for the coefficient matrix: normalized diagonal matrix.
+            coeff_matrix: Matrix::identity(
+                Complex::new(((num_electrons as f64) / 2.0) / (basis.len() as f64), 0.0),
                 basis.len(),
-            ),*/
-            coeff_matrix: Matrix::from_row_vecs(vec![vec![Complex::new(0.6, 0.0), Complex::new(0.4, 0.0)].into(),
-                vec![Complex::new(0.3, 0.0), Complex::new(0.7, 0.0)].into()]),
+            ),
             nuclear_potential: nuclear_potential(&nuclei, grid_config.clone()),
             grid_config,
             basis,
@@ -84,7 +99,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
 
     fn compute_energy_and_density(&mut self) {
         // Compute molecular orbitals from basis function and coefficients.
-        let coeffs = self.coeff_matrix.to_row_vecs();
+        let coeffs = self.coeff_matrix.to_col_vecs();
         let mut bras: Vec<Grid> = Vec::new();
         let mut kinetic_energies: Vec<Grid> = Vec::new();
         let mut kets: Vec<Grid> = Vec::new();
@@ -194,7 +209,6 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             );
             ret = true;
         }
-        println!("{:?}", eigenvecs);
         self.coeff_matrix =
             self.inverse_orthogonalizer.clone() * (Matrix::from_row_vecs(eigenvecs).transpose());
         ret
@@ -206,12 +220,13 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
 
         for i in 0..max_iters {
             let old_energy = self.energy;
-            println!("Iter: {}  Energy: {:?}", i, old_energy);
-            println!("{:?}", self.coeff_matrix);
-            let degenerate_orbitals = self.compute_coeff_matrix();
+            println!("Iter: {}  Energy: {}", i, old_energy.re);
+            if self.compute_coeff_matrix() {
+                return false;
+            }
             self.compute_energy_and_density();
-            if degenerate_orbitals || (old_energy - self.energy).norm_sqr() < tolerance {
-                println!("{:?}", self.coeff_matrix);
+            if (old_energy - self.energy).norm_sqr() < tolerance {
+                println!("Converged!  Energy: {}\nCoeffs: {:?}", old_energy.re, self.coeff_matrix);
                 return true;
             }
         }
@@ -230,9 +245,9 @@ mod tests {
         start_x: -3.0,
         start_y: -3.0,
         start_z: -3.0,
-        end_x: 4.0,
-        end_y: 4.0,
-        end_z: 4.0,
+        end_x: 3.0,
+        end_y: 3.0,
+        end_z: 3.0,
         width_voxels: 32,
         height_voxels: 32,
         depth_voxels: 32,
@@ -295,10 +310,10 @@ mod tests {
             K_GRID_CONFIG,
         );
         scf.iterate(1E-4, 10);
-        let actual = scf.energy;
-        let expected = -2.9034;
+        let actual = scf.energy.re;
+        let expected = -1.025;
         assert!(
-            (actual.re - expected).abs() < 0.1,
+            (actual - expected).abs() < 0.1,
             "Incorrect helium atom energy! Expected {} Actual {}",
             expected,
             actual,

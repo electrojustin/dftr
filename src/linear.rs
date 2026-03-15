@@ -711,7 +711,10 @@ mod tests {
         let expected_eigenvals = vec![Complex::new(3.0, 0.0), Complex::new(1.0, 0.0)];
         let expected_eigenvecs = vec![
             Vector::from(vec![Complex::new(0.0, 0.0), Complex::new(1.0, 0.0)]),
-            Vector::from(vec![Complex::new(-2.0, 0.0), Complex::new(1.0, 0.0)]),
+            Vector::from(vec![
+                Complex::new(-0.8944271909999159, 0.0),
+                Complex::new(0.4472135954999579, 0.0),
+            ]),
         ];
         let (actual_eigenvals, actual_eigenvecs) = input.eigen(1E-10, 1000);
         let is_correct = Vector::from(expected_eigenvals.clone())
