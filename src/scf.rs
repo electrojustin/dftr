@@ -1,0 +1,307 @@
+use std::iter::zip;
+
+use num::complex::Complex;
+
+use crate::basis::Basis;
+use crate::functional::repulsion_potential_functional;
+use crate::grid::Grid;
+use crate::grid::GridConfig;
+use crate::linear::Matrix;
+use crate::linear::Vector;
+use crate::nucleus::nuclear_potential;
+use crate::nucleus::Nucleus;
+
+struct SCF<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> {
+    pub electron_density: Grid,
+    pub energy: Complex<f64>,
+    exchange_correlation_functional: XC1,
+    exchange_correlation_potential_functional: XC2,
+    basis: Vec<B>,
+    coeff_matrix: Matrix,
+    grid_config: GridConfig,
+    nuclear_potential: Grid,
+    repulsion_potential: Grid,
+    exchange_correlation_potential: Grid,
+    orthogonalizer: Matrix,
+    inverse_orthogonalizer: Matrix,
+}
+
+impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
+    pub fn new(
+        nuclei: Vec<Nucleus>,
+        mut basis: Vec<B>,
+        num_electrons: usize,
+        exchange_correlation_functional: XC1,
+        exchange_correlation_potential_functional: XC2,
+        grid_config: GridConfig,
+    ) -> Self {
+        let overlap_matrix = Matrix::from_row_vecs(
+            (0..basis.len())
+                .map(|i| -> Vector {
+                    (0..basis.len())
+                        .map(|j| -> Complex<f64> {
+                            (basis[i].bra(grid_config.clone()) * basis[j].ket(grid_config.clone()))
+                                .integrate()
+                        })
+                        .collect::<Vec<_>>()
+                        .into()
+                })
+                .collect::<Vec<_>>(),
+        );
+        let (eigenvals, eigenvecs) = overlap_matrix.clone().eigen(1E-10, basis.len() * 10);
+        let eigenvals = Matrix::from_diagonal(
+            eigenvals
+                .iter()
+                .map(|x| -> Complex<f64> { x.powf(-0.5) })
+                .collect(),
+        );
+        let eigenvecs = Matrix::from_row_vecs(eigenvecs).transpose();
+        let orthogonalizer = eigenvecs.clone() * eigenvals * eigenvecs.transpose();
+        let inverse_orthogonalizer = orthogonalizer.clone().inverse(1E-10);
+
+        let default_grid = Grid::new(grid_config.clone());
+
+        Self {
+            electron_density: default_grid.clone(),
+            energy: Complex::new(0.0, 0.0),
+            exchange_correlation_functional,
+            exchange_correlation_potential_functional,
+/*            coeff_matrix: Matrix::identity(
+                Complex::new(2.0 / (num_electrons as f64), 0.0),
+                basis.len(),
+            ),*/
+            coeff_matrix: Matrix::from_row_vecs(vec![vec![Complex::new(0.6, 0.0), Complex::new(0.4, 0.0)].into(),
+                vec![Complex::new(0.3, 0.0), Complex::new(0.7, 0.0)].into()]),
+            nuclear_potential: nuclear_potential(&nuclei, grid_config.clone()),
+            grid_config,
+            basis,
+            orthogonalizer,
+            inverse_orthogonalizer,
+            repulsion_potential: default_grid.clone(),
+            exchange_correlation_potential: default_grid,
+        }
+    }
+
+    fn compute_energy_and_density(&mut self) {
+        // Compute molecular orbitals from basis function and coefficients.
+        let coeffs = self.coeff_matrix.to_row_vecs();
+        let mut bras: Vec<Grid> = Vec::new();
+        let mut kinetic_energies: Vec<Grid> = Vec::new();
+        let mut kets: Vec<Grid> = Vec::new();
+        // In order for the matrices to be square, we need as many basis functions as orbitals.
+        for orbital in 0..self.basis.len() {
+            bras.push(
+                zip(self.basis.iter_mut(), coeffs[orbital].0.iter())
+                    .fold(Grid::new(self.grid_config.clone()), |acc, (x, c)| -> Grid {
+                        acc + *c * x.bra(self.grid_config.clone())
+                    }),
+            );
+            kinetic_energies.push(
+                zip(self.basis.iter_mut(), coeffs[orbital].0.iter())
+                    .fold(Grid::new(self.grid_config.clone()), |acc, (x, c)| -> Grid {
+                        acc + *c * x.kinetic_energy(self.grid_config.clone())
+                    }),
+            );
+            kets.push(
+                zip(self.basis.iter_mut(), coeffs[orbital].0.iter())
+                    .fold(Grid::new(self.grid_config.clone()), |acc, (x, c)| -> Grid {
+                        acc + *c * x.ket(self.grid_config.clone())
+                    }),
+            );
+        }
+
+        // Currently we only support closed shell systems, so we double the electron density,
+        // kinetic energy, and potential energy to account for 2 electrons being present in each
+        // molecular orbital. Note that repulsion and exchange energies are not doubled because the
+        // electron density already accounts for that.
+        self.electron_density = zip(bras.iter(), kets.iter()).fold(
+            Grid::new(self.grid_config.clone()),
+            |acc, (bra, ket)| -> Grid { acc + Complex::new(2.0, 0.0) * bra.clone() * ket.clone() },
+        );
+
+        let kinetic_energy = Complex::new(2.0, 0.0)
+            * zip(bras.iter(), kinetic_energies.into_iter()).fold(
+                Complex::new(0.0, 0.0),
+                |acc, (bra, kinetic_energy)| -> Complex<f64> {
+                    acc + (bra.clone() * kinetic_energy).integrate()
+                },
+            );
+
+        let nuclear_potential_energy = Complex::new(2.0, 0.0)
+            * zip(bras.iter(), kets.iter()).fold(
+                Complex::new(0.0, 0.0),
+                |acc, (bra, ket)| -> Complex<f64> {
+                    acc + (bra.clone() * self.nuclear_potential.clone() * ket.clone()).integrate()
+                },
+            );
+
+        self.repulsion_potential = repulsion_potential_functional(self.electron_density.clone());
+        // We still have to divide the repulsion energy by 2 because each pairwise electron
+        // interaction will be double counted otherwise.
+        let repulsion_potential_energy = Complex::new(0.5, 0.0)
+            * zip(bras.into_iter(), kets.into_iter()).fold(
+                Complex::new(0.0, 0.0),
+                |acc, (bra, ket)| -> Complex<f64> {
+                    acc + (bra * self.repulsion_potential.clone() * ket).integrate()
+                },
+            );
+
+        self.exchange_correlation_potential =
+            (self.exchange_correlation_potential_functional)(self.electron_density.clone());
+        let exchange_correlation_energy =
+            (self.exchange_correlation_functional)(self.electron_density.clone()).integrate();
+
+        self.energy = kinetic_energy
+            + nuclear_potential_energy
+            + repulsion_potential_energy
+            + exchange_correlation_energy;
+    }
+
+    fn fock_matrix(&mut self) -> Matrix {
+        Matrix::from_row_vecs(
+            (0..self.basis.len())
+                .map(|i| -> Vector {
+                    (0..self.basis.len())
+                        .map(|j| -> Complex<f64> {
+                            (self.basis[i].bra(self.grid_config.clone())
+                                * (self.basis[j].kinetic_energy(self.grid_config.clone())
+                                    + (self.nuclear_potential.clone()
+                                        + self.repulsion_potential.clone()
+                                        + self.exchange_correlation_potential.clone())
+                                        * self.basis[j].ket(self.grid_config.clone())))
+                            .integrate()
+                        })
+                        .collect::<Vec<_>>()
+                        .into()
+                })
+                .collect(),
+        )
+    }
+
+    // Adapted from https://enccs.github.io/veloxchem-workshop/notebooks/rh-scf/
+    // Returns true if orbitals have degenerated, so we should break the SCF loop.
+    fn compute_coeff_matrix(&mut self) -> bool {
+        let mut ret = false;
+        let fock = self.fock_matrix();
+        let ortho_fock = self.orthogonalizer.clone() * fock;
+        let (eigenvals, mut eigenvecs) = ortho_fock.eigen(1E-10, self.basis.len() * 10);
+        // Sometimes orbitals degenerate, so we need to 0 pad the coefficient matrix.
+        if eigenvecs.len() < self.basis.len() {
+            eigenvecs.append(
+                &mut (eigenvecs.len()..self.basis.len())
+                    .map(|i| -> Vector { vec![Complex::new(0.0, 0.0); self.basis.len()].into() })
+                    .collect(),
+            );
+            ret = true;
+        }
+        println!("{:?}", eigenvecs);
+        self.coeff_matrix =
+            self.inverse_orthogonalizer.clone() * (Matrix::from_row_vecs(eigenvecs).transpose());
+        ret
+    }
+
+    // Returns true on convergence.
+    fn iterate(&mut self, tolerance: f64, max_iters: usize) -> bool {
+        self.compute_energy_and_density();
+
+        for i in 0..max_iters {
+            let old_energy = self.energy;
+            println!("Iter: {}  Energy: {:?}", i, old_energy);
+            println!("{:?}", self.coeff_matrix);
+            let degenerate_orbitals = self.compute_coeff_matrix();
+            self.compute_energy_and_density();
+            if degenerate_orbitals || (old_energy - self.energy).norm_sqr() < tolerance {
+                println!("{:?}", self.coeff_matrix);
+                return true;
+            }
+        }
+        false
+    }
+}
+
+mod tests {
+    use super::*;
+    use crate::basis::caching_basis::CachingBasis;
+    use crate::basis::sto_ng::STONG;
+    use crate::functional::lda::lda_functional;
+    use crate::functional::lda::lda_potential_functional;
+
+    const K_GRID_CONFIG: GridConfig = GridConfig {
+        start_x: -3.0,
+        start_y: -3.0,
+        start_z: -3.0,
+        end_x: 4.0,
+        end_y: 4.0,
+        end_z: 4.0,
+        width_voxels: 32,
+        height_voxels: 32,
+        depth_voxels: 32,
+    };
+
+    #[test]
+    fn test_compute_helium_energy() {
+        let basis = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
+        let nucleus = Nucleus {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            charge: 2.0,
+        };
+        let mut scf = SCF::new(
+            vec![nucleus],
+            vec![CachingBasis::new(basis)],
+            2,
+            |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },
+            |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
+            K_GRID_CONFIG,
+        );
+        scf.compute_energy_and_density();
+        let actual = scf.energy;
+        let expected = -2.9034;
+        assert!(
+            (actual.re - expected).abs() < 0.1,
+            "Incorrect helium atom energy! Expected {} Actual {}",
+            expected,
+            actual,
+        );
+    }
+
+    #[test]
+    fn test_scf_molecular_hydrogen() {
+        // Experimental H-H bond length is 0.7414A.
+        // Source: https://cccbdb.nist.gov/exp2x.asp?casno=1333740
+        let basis1 =
+            STONG::sto_3g(-0.7414 / 2.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
+        let basis2 =
+            STONG::sto_3g(0.7414 / 2.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
+        let nucleus1 = Nucleus {
+            x: -0.7414 / 2.0,
+            y: 0.0,
+            z: 0.0,
+            charge: 1.0,
+        };
+        let nucleus2 = Nucleus {
+            x: 0.7414 / 2.0,
+            y: 0.0,
+            z: 0.0,
+            charge: 1.0,
+        };
+        let mut scf = SCF::new(
+            vec![nucleus1, nucleus2],
+            vec![CachingBasis::new(basis1), CachingBasis::new(basis2)],
+            2,
+            |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },
+            |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
+            K_GRID_CONFIG,
+        );
+        scf.iterate(1E-4, 10);
+        let actual = scf.energy;
+        let expected = -2.9034;
+        assert!(
+            (actual.re - expected).abs() < 0.1,
+            "Incorrect helium atom energy! Expected {} Actual {}",
+            expected,
+            actual,
+        );
+    }
+}

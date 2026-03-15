@@ -327,9 +327,9 @@ mod tests {
         end_x: 1.0,
         end_y: 1.0,
         end_z: 1.0,
-        width_voxels: 64,
-        height_voxels: 64,
-        depth_voxels: 64,
+        width_voxels: 32,
+        height_voxels: 32,
+        depth_voxels: 32,
     };
 
     #[test]

@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use num::complex::Complex;
 
 use crate::grid::Grid;
@@ -7,7 +9,7 @@ pub mod caching_basis;
 pub mod gaussian_type_orbital;
 pub mod sto_ng;
 
-pub trait Basis {
+pub trait Basis: Debug + Clone {
     // Evaluate the position operator at coordinates (x, y, z).
     fn pos(&self, x: f64, y: f64, z: f64) -> Complex<f64>;
 

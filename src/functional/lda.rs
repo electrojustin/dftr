@@ -3,7 +3,7 @@ use num::Complex;
 use crate::grid::Grid;
 
 pub fn lda_functional(electron_density: Grid, alpha: f64) -> Grid {
-    let mut exchange_density = electron_density.clone();
+    let mut exchange_density = electron_density;
     exchange_density.map(&|_x, _y, _z, val| -> Complex<f64> {
         Complex::new(
             -9.0 / 8.0 * alpha * (3.0 / std::f64::consts::PI).powf(1.0 / 3.0),
@@ -11,6 +11,17 @@ pub fn lda_functional(electron_density: Grid, alpha: f64) -> Grid {
         ) * val.powf(4.0 / 3.0)
     });
     exchange_density
+}
+
+pub fn lda_potential_functional(electron_density: Grid, alpha: f64) -> Grid {
+    let mut exchange_potential = electron_density;
+    exchange_potential.map(&|_x, _y, _z, val| -> Complex<f64> {
+        Complex::new(
+            -3.0 / 2.0 * alpha * (3.0 / std::f64::consts::PI).powf(1.0 / 3.0),
+            0.0,
+        ) * val.powf(1.0 / 3.0)
+    });
+    exchange_potential
 }
 
 mod tests {

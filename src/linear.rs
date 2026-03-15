@@ -4,7 +4,7 @@ use std::ops;
 use num::complex::Complex;
 
 #[derive(Debug, Clone)]
-pub struct Vector(Vec<Complex<f64>>);
+pub struct Vector(pub Vec<Complex<f64>>);
 
 impl Vector {
     // Compare two vectors, returning true if each element is equal to within the specified
@@ -323,6 +323,11 @@ impl Matrix {
             let char_matrix = self.clone() - Matrix::identity(*eigenval, self.width);
             eigenvectors.append(&mut char_matrix.kernel(zero_threshold));
         }
+        // Normalize eigenvectors.
+        let eigenvectors = eigenvectors
+            .into_iter()
+            .map(|x| -> Vector { (Complex::new(1.0, 0.0) / x.l2()) * x })
+            .collect();
 
         (eigenvalues, eigenvectors)
     }

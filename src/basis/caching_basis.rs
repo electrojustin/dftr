@@ -6,6 +6,7 @@ use crate::basis::Basis;
 use crate::grid::Grid;
 use crate::grid::GridConfig;
 
+#[derive(Debug, Clone)]
 pub struct CachingBasis<T: Basis> {
     delegate: T,
     ket_cache: HashMap<GridConfig, Grid>,
