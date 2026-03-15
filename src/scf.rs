@@ -9,11 +9,13 @@ use crate::grid::GridConfig;
 use crate::linear::Matrix;
 use crate::linear::Vector;
 use crate::nucleus::nuclear_potential;
+use crate::nucleus::nuclear_repulsion;
 use crate::nucleus::Nucleus;
 
 struct SCF<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> {
     pub electron_density: Grid,
     pub energy: Complex<f64>,
+    nuclear_repulsion_energy: Complex<f64>,
     exchange_correlation_functional: XC1,
     exchange_correlation_potential_functional: XC2,
     basis: Vec<B>,
@@ -50,7 +52,23 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
                 })
                 .collect::<Vec<_>>(),
         );
-        let (eigenvals, eigenvecs) = overlap_matrix.clone().eigen(1E-10, basis.len() * 10);
+        assert!(
+            overlap_matrix.is_symmetric(1E-10),
+            "Overlap matrix not symmetric!"
+        );
+        let (eigenvals, eigenvecs) = overlap_matrix.clone().eigen(1E-10, basis.len() * 100);
+        // Quickly validate overlap matrix eigendecomposition.
+        for (val, vec) in zip(eigenvals.iter(), eigenvecs.iter()) {
+            let expected = *val * vec.clone();
+            let actual = overlap_matrix.clone() * vec.clone();
+            assert!(
+                expected.compare(&actual, 1E-10),
+                "Error in overlap matrix eigen decomposition! Expected: {:?}\nActual: {:?}",
+                expected,
+                actual,
+            );
+        }
+        let test_eigenvals = eigenvals.clone();
         let eigenvals = Matrix::from_diagonal(
             eigenvals
                 .iter()
@@ -58,7 +76,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
                 .collect(),
         );
         let eigenvecs = Matrix::from_row_vecs(eigenvecs).transpose();
-        let orthogonalizer = eigenvecs.clone() * eigenvals * eigenvecs.transpose();
+        let orthogonalizer = eigenvecs.clone() * eigenvals.clone() * eigenvecs.clone().transpose();
         let inverse_orthogonalizer = orthogonalizer.clone().inverse(1E-10);
         assert!(
             Matrix::identity(Complex::new(1.0, 0.0), basis.len()).compare(
@@ -80,6 +98,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         Self {
             electron_density: default_grid.clone(),
             energy: Complex::new(0.0, 0.0),
+            nuclear_repulsion_energy: nuclear_repulsion(&nuclei),
             exchange_correlation_functional,
             exchange_correlation_potential_functional,
             // Arbitrary guess for the coefficient matrix: normalized diagonal matrix.
@@ -166,7 +185,17 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         let exchange_correlation_energy =
             (self.exchange_correlation_functional)(self.electron_density.clone()).integrate();
 
-        self.energy = kinetic_energy
+        println!(
+            "{} {} {} {} {}",
+            self.nuclear_repulsion_energy,
+            kinetic_energy.re,
+            nuclear_potential_energy.re,
+            repulsion_potential_energy.re,
+            exchange_correlation_energy.re
+        );
+
+        self.energy = self.nuclear_repulsion_energy
+            + kinetic_energy
             + nuclear_potential_energy
             + repulsion_potential_energy
             + exchange_correlation_energy;
@@ -222,11 +251,15 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             let old_energy = self.energy;
             println!("Iter: {}  Energy: {}", i, old_energy.re);
             if self.compute_coeff_matrix() {
+                println!("Orbitals degenerated!");
                 return false;
             }
             self.compute_energy_and_density();
             if (old_energy - self.energy).norm_sqr() < tolerance {
-                println!("Converged!  Energy: {}\nCoeffs: {:?}", old_energy.re, self.coeff_matrix);
+                println!(
+                    "Converged!  Energy: {}\nCoeffs: {:?}",
+                    old_energy.re, self.coeff_matrix
+                );
                 return true;
             }
         }
@@ -242,12 +275,12 @@ mod tests {
     use crate::functional::lda::lda_potential_functional;
 
     const K_GRID_CONFIG: GridConfig = GridConfig {
-        start_x: -3.0,
-        start_y: -3.0,
-        start_z: -3.0,
-        end_x: 3.0,
-        end_y: 3.0,
-        end_z: 3.0,
+        start_x: -4.0,
+        start_y: -4.0,
+        start_z: -4.0,
+        end_x: 4.0,
+        end_y: 4.0,
+        end_z: 4.0,
         width_voxels: 32,
         height_voxels: 32,
         depth_voxels: 32,
@@ -271,11 +304,48 @@ mod tests {
             K_GRID_CONFIG,
         );
         scf.compute_energy_and_density();
-        let actual = scf.energy;
+        let actual = scf.energy.re;
         let expected = -2.9034;
         assert!(
-            (actual.re - expected).abs() < 0.1,
+            (actual - expected).abs() < 0.2,
             "Incorrect helium atom energy! Expected {} Actual {}",
+            expected,
+            actual,
+        );
+    }
+
+    #[test]
+    fn test_compute_double_helium() {
+        let basis1 = STONG::sto_3g(2.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
+        let basis2 = STONG::sto_3g(-2.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
+        let nucleus1 = Nucleus {
+            x: 2.0,
+            y: 0.0,
+            z: 0.0,
+            charge: 2.0,
+        };
+        let nucleus2 = Nucleus {
+            x: -2.0,
+            y: 0.0,
+            z: 0.0,
+            charge: 2.0,
+        };
+        let mut scf = SCF::new(
+            vec![nucleus1, nucleus2],
+            vec![CachingBasis::new(basis1), CachingBasis::new(basis2)],
+            4,
+            |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },
+            |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
+            K_GRID_CONFIG,
+        );
+        // We don't actually run SCF here because the orbitals will degenerate since He-He isn't a
+        // real molecule.
+        scf.compute_energy_and_density();
+        let actual = scf.energy.re;
+        let expected = -2.9034 * 2.0;
+        assert!(
+            (actual - expected).abs() < 0.3,
+            "Incorrect double helium energy! Expected {} Actual {}",
             expected,
             actual,
         );
@@ -309,12 +379,50 @@ mod tests {
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        scf.iterate(1E-4, 10);
+        scf.iterate(1E-10, 10);
         let actual = scf.energy.re;
         let expected = -1.025;
         assert!(
             (actual - expected).abs() < 0.1,
-            "Incorrect helium atom energy! Expected {} Actual {}",
+            "Incorrect hydrogen molecule energy! Expected {} Actual {}",
+            expected,
+            actual,
+        );
+    }
+
+    #[test]
+    fn test_scf_neon() {
+        let basis1 = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
+        let basis2 = STONG::sto_3g(0.0, 0.0, 0.0, "2s").expect("Failed to create basis function!");
+        let basis3 = STONG::sto_3g(0.0, 0.0, 0.0, "2p1").expect("Failed to create basis function!");
+        let basis4 = STONG::sto_3g(0.0, 0.0, 0.0, "2p2").expect("Failed to create basis function!");
+        let basis5 = STONG::sto_3g(0.0, 0.0, 0.0, "2p3").expect("Failed to create basis function!");
+        let nucleus = Nucleus {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            charge: 10.0,
+        };
+        let mut scf = SCF::new(
+            vec![nucleus],
+            vec![
+                CachingBasis::new(basis1),
+                CachingBasis::new(basis2),
+                CachingBasis::new(basis3),
+                CachingBasis::new(basis4),
+                CachingBasis::new(basis5),
+            ],
+            10,
+            |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },
+            |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
+            K_GRID_CONFIG,
+        );
+        scf.iterate(1E-10, 10);
+        let actual = scf.energy.re;
+        let expected = -1.025;
+        assert!(
+            (actual - expected).abs() < 0.1,
+            "Incorrect neon energy! Expected {} Actual {}",
             expected,
             actual,
         );

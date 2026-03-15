@@ -50,6 +50,54 @@ impl STONG<GTO> {
                     Complex::new(0.444635, 0.0),
                 ],
             )),
+            "2s" => Ok(STONG::new(
+                vec![
+                    GTO::new(x, y, z, 0.994203, 0, 0, 0),
+                    GTO::new(x, y, z, 0.231031, 0, 0, 0),
+                    GTO::new(x, y, z, 0.0751386, 0, 0, 0),
+                ],
+                vec![
+                    Complex::new(-0.0999672, 0.0),
+                    Complex::new(0.399515, 0.0),
+                    Complex::new(0.700115, 0.0),
+                ],
+            )),
+            "2p1" => Ok(STONG::new(
+                vec![
+                    GTO::new(x, y, z, 0.994203, 1, 0, 0),
+                    GTO::new(x, y, z, 0.231031, 1, 0, 0),
+                    GTO::new(x, y, z, 0.0751386, 1, 0, 0),
+                ],
+                vec![
+                    Complex::new(0.155916, 0.0),
+                    Complex::new(0.607684, 0.0),
+                    Complex::new(0.391957, 0.0),
+                ],
+            )),
+            "2p2" => Ok(STONG::new(
+                vec![
+                    GTO::new(x, y, z, 0.994203, 0, 1, 0),
+                    GTO::new(x, y, z, 0.231031, 0, 1, 0),
+                    GTO::new(x, y, z, 0.0751386, 0, 1, 0),
+                ],
+                vec![
+                    Complex::new(0.155916, 0.0),
+                    Complex::new(0.607684, 0.0),
+                    Complex::new(0.391957, 0.0),
+                ],
+            )),
+            "2p3" => Ok(STONG::new(
+                vec![
+                    GTO::new(x, y, z, 0.994203, 0, 0, 1),
+                    GTO::new(x, y, z, 0.231031, 0, 0, 1),
+                    GTO::new(x, y, z, 0.0751386, 0, 0, 1),
+                ],
+                vec![
+                    Complex::new(0.155916, 0.0),
+                    Complex::new(0.607684, 0.0),
+                    Complex::new(0.391957, 0.0),
+                ],
+            )),
             _ => Err(format!("STO-3G presets do not yet support {shell} shell")),
         }
     }
@@ -82,16 +130,49 @@ mod tests {
     use crate::nucleus::Nucleus;
 
     const K_GRID_CONFIG: GridConfig = GridConfig {
-        start_x: -3.0,
-        start_y: -3.0,
-        start_z: -3.0,
-        end_x: 3.0,
-        end_y: 3.0,
-        end_z: 3.0,
+        start_x: -4.0,
+        start_y: -4.0,
+        start_z: -4.0,
+        end_x: 4.0,
+        end_y: 4.0,
+        end_z: 4.0,
         width_voxels: 32,
         height_voxels: 32,
         depth_voxels: 32,
     };
+
+    #[test]
+    fn test_sto3g_normalized() {
+        let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
+        let integral = (test.bra(K_GRID_CONFIG) * test.ket(K_GRID_CONFIG))
+            .integrate()
+            .re;
+        assert!(
+            (integral - 1.0).abs() < 0.1,
+            "STO-3G 1s not normalized! Integral: {}",
+            integral
+        );
+
+        let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "2s").expect("Failed to create STO-3G 2s!");
+        let integral = (test.bra(K_GRID_CONFIG) * test.ket(K_GRID_CONFIG))
+            .integrate()
+            .re;
+        assert!(
+            (integral - 1.0).abs() < 0.1,
+            "STO-3G 2s not normalized! Integral: {}",
+            integral
+        );
+
+        let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "2p1").expect("Failed to create STO-3G 2p!");
+        let integral = (test.bra(K_GRID_CONFIG) * test.ket(K_GRID_CONFIG))
+            .integrate()
+            .re;
+        assert!(
+            (integral - 1.0).abs() < 0.1,
+            "STO-3G 2p not normalized! Integral: {}",
+            integral
+        );
+    }
 
     // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
     #[test]

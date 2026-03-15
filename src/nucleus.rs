@@ -31,6 +31,25 @@ pub fn nuclear_potential(nuclei: &Vec<Nucleus>, grid_config: GridConfig) -> Grid
     grid
 }
 
+// Classic coulomb nuclear repulsion energy.
+pub fn nuclear_repulsion(nuclei: &Vec<Nucleus>) -> Complex<f64> {
+    (0..nuclei.len())
+        .map(|i| -> Complex<f64> {
+            ((i + 1)..nuclei.len())
+                .map(|j| -> Complex<f64> {
+                    let dx = nuclei[i].x - nuclei[j].x;
+                    let dy = nuclei[i].y - nuclei[j].y;
+                    let dz = nuclei[i].z - nuclei[j].z;
+                    Complex::new(
+                        nuclei[i].charge * nuclei[j].charge / (dx * dx + dy * dy + dz * dz).sqrt(),
+                        0.0,
+                    )
+                })
+                .fold(Complex::new(0.0, 0.0), |acc, x| -> Complex<f64> { acc + x })
+        })
+        .fold(Complex::new(0.0, 0.0), |acc, x| -> Complex<f64> { acc + x })
+}
+
 mod tests {
     use super::*;
     use crate::basis::gaussian_type_orbital::GTO;

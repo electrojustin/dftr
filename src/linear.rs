@@ -1,9 +1,12 @@
+use std::fmt;
+use std::fmt::Debug;
+use std::fmt::Formatter;
 use std::iter::zip;
 use std::ops;
 
 use num::complex::Complex;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Vector(pub Vec<Complex<f64>>);
 
 impl Vector {
@@ -39,13 +42,27 @@ impl Vector {
     }
 
     // Special case of compare() for checking if a vector is the zero vector.
-    pub fn is_zero(&self, zero_threshold: f64) -> bool {
+    pub fn is_zero(&self, tolerance: f64) -> bool {
         for element in self.0.iter() {
-            if element.norm_sqr() > zero_threshold {
+            if element.norm_sqr() > tolerance {
                 return false;
             }
         }
         true
+    }
+}
+
+impl Debug for Vector {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "Vector: [")?;
+        for i in 0..self.0.len() {
+            if i != self.0.len() - 1 {
+                write!(f, "{}, ", self.0[i].re)?;
+            } else {
+                write!(f, "{}", self.0[i].re)?;
+            }
+        }
+        write!(f, "]")
     }
 }
 
@@ -55,7 +72,7 @@ impl From<Vec<Complex<f64>>> for Vector {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Matrix {
     data: Vec<Complex<f64>>,
     width: usize,
@@ -153,6 +170,24 @@ impl Matrix {
         true
     }
 
+    // Returns true if the matrix is symmetric within the specified tolerance.
+    pub fn is_symmetric(&self, tolerance: f64) -> bool {
+        if self.width != self.height {
+            return false;
+        }
+
+        for i in 0..self.width {
+            for j in i..self.width {
+                if (self.data[i * self.width + j] - self.data[j * self.width + i]).norm_sqr()
+                    > tolerance
+                {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
     // Orthonormal decomposition via the Gram-Schmidt algorithm.
     pub fn qr_decomp(self) -> (Matrix, Matrix) {
         assert_eq!(self.width, self.height);
@@ -200,7 +235,7 @@ impl Matrix {
     }
 
     // Basic Gaussian elimination algorithm.
-    fn row_echelon(&self, augmentation: &Matrix, zero_threshold: f64) -> (Matrix, Matrix) {
+    fn row_echelon(&self, augmentation: &Matrix, tolerance: f64) -> (Matrix, Matrix) {
         assert_eq!(self.height, augmentation.height);
 
         let mut lhs_rows = self.to_row_vecs();
@@ -209,7 +244,7 @@ impl Matrix {
             let offset = 'find_offset: {
                 for x in y..self.width {
                     for y2 in y..self.height {
-                        if lhs_rows[y2].0[x].norm_sqr() > zero_threshold {
+                        if lhs_rows[y2].0[x].norm_sqr() > tolerance {
                             // Swap rows so the current row has the furthest left non-zero element.
                             if y2 != y {
                                 lhs_rows.swap(y, y2);
@@ -240,13 +275,13 @@ impl Matrix {
     }
 
     // Compute the inverse of the matrix using Gaussian elimination.
-    pub fn inverse(self, zero_threshold: f64) -> Matrix {
+    pub fn inverse(self, tolerance: f64) -> Matrix {
         assert_eq!(self.width, self.height);
 
         let height = self.height;
         let (lhs, rhs) = self.row_echelon(
             &Matrix::identity(Complex::new(1.0, 0.0), self.width),
-            zero_threshold,
+            tolerance,
         );
 
         let mut lhs_rows = lhs.to_row_vecs();
@@ -264,27 +299,21 @@ impl Matrix {
     }
 
     // Compute the kernel (null space) of the matrix using Gaussian elimination.
-    pub fn kernel(&self, zero_threshold: f64) -> Vec<Vector> {
+    pub fn kernel(&self, tolerance: f64) -> Vec<Vector> {
         let transpose_self = self.clone().transpose();
         let (lhs, rhs) = transpose_self.row_echelon(
             &Matrix::identity(Complex::new(1.0, 0.0), self.width),
-            zero_threshold,
+            tolerance,
         );
         let lhs_rows = lhs.to_row_vecs();
         let rhs_rows = rhs.to_row_vecs();
         zip(lhs_rows.into_iter(), rhs_rows.into_iter())
-            .filter_map(|(l, r)| {
-                if l.is_zero(zero_threshold) {
-                    Some(r)
-                } else {
-                    None
-                }
-            })
+            .filter_map(|(l, r)| if l.is_zero(tolerance) { Some(r) } else { None })
             .collect()
     }
 
     // Implementation of Eigendecomposition by QR algorithm.
-    pub fn eigen(&self, zero_threshold: f64, max_iters: usize) -> (Vec<Complex<f64>>, Vec<Vector>) {
+    pub fn eigen(&self, tolerance: f64, max_iters: usize) -> (Vec<Complex<f64>>, Vec<Vector>) {
         assert_eq!(self.width, self.height);
 
         let mut similar_matrix = self.clone();
@@ -294,7 +323,7 @@ impl Matrix {
                 return (vec![], vec![]);
             }
             // The eigenvalues of triangular matrices are the diagonal.
-            if similar_matrix.is_triangular(zero_threshold) {
+            if similar_matrix.is_triangular(tolerance) {
                 break;
             }
 
@@ -309,8 +338,22 @@ impl Matrix {
         let mut eigenvalues: Vec<Complex<f64>> = Vec::new();
         for i in 0..self.width {
             let diag_val = similar_matrix.data[i * self.width + i];
-            if diag_val.norm_sqr() > zero_threshold {
+            if diag_val.norm_sqr() > tolerance {
                 eigenvalues.push(diag_val);
+            }
+        }
+
+        let mut dedup_eigenvals: Vec<Complex<f64>> = Vec::new();
+        for eigenval in eigenvalues.iter() {
+            let mut dup = false;
+            for prev_eigenval in dedup_eigenvals.iter() {
+                if (eigenval - prev_eigenval).norm_sqr() < tolerance {
+                    dup = true;
+                    break;
+                }
+            }
+            if !dup {
+                dedup_eigenvals.push(*eigenval);
             }
         }
 
@@ -319,16 +362,28 @@ impl Matrix {
         // eigenvalue. The non-zero vectors x which satisfy this equation, i.e. the null space of
         // (A - lambda * I), are the eigenvectors.
         let mut eigenvectors: Vec<Vector> = Vec::new();
-        for eigenval in eigenvalues.iter() {
+        for eigenval in dedup_eigenvals.iter() {
+            // We can have multiple eigenvectors per eigenvalue. In this case, we should return the
+            // orthogonal basis for the eigenspace of the corresponding eigenvalues, or else
+            // diagonalization won't work because our eigenvectors won't be linearly independent.
             let char_matrix = self.clone() - Matrix::identity(*eigenval, self.width);
-            eigenvectors.append(&mut char_matrix.kernel(zero_threshold));
+            let mut curr_eigenspace = char_matrix.kernel(tolerance);
+            let mut ortho_eigenspace: Vec<Vector> = Vec::new();
+            for mut eigenvec in curr_eigenspace.into_iter() {
+                for prev_eigenvec in ortho_eigenspace.iter() {
+                    let coeff = eigenvec.proj(prev_eigenvec);
+                    eigenvec = eigenvec - (coeff * prev_eigenvec.clone());
+                    if eigenvec.is_zero(tolerance) {
+                        break;
+                    }
+                }
+                if !eigenvec.is_zero(tolerance) {
+                    let eigenvec = Complex::new(1.0, 0.0) / eigenvec.l2() * eigenvec;
+                    ortho_eigenspace.push(eigenvec.clone());
+                    eigenvectors.push(eigenvec);
+                }
+            }
         }
-        // Normalize eigenvectors.
-        let eigenvectors = eigenvectors
-            .into_iter()
-            .map(|x| -> Vector { (Complex::new(1.0, 0.0) / x.l2()) * x })
-            .collect();
-
         (eigenvalues, eigenvectors)
     }
 }
@@ -418,6 +473,24 @@ impl ops::Sub<Matrix> for Matrix {
             width,
             height,
         }
+    }
+}
+
+impl Debug for Matrix {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "Matrix: [")?;
+        for y in 0..self.height {
+            write!(f, "[")?;
+            for x in 0..self.width {
+                if x != self.width - 1 {
+                    write!(f, "{}, ", self.data[y * self.width + x].re)?;
+                } else {
+                    write!(f, "{}", self.data[y * self.width + x].re)?;
+                }
+            }
+            write!(f, "],\n")?;
+        }
+        write!(f, "]")
     }
 }
 
