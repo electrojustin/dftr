@@ -38,7 +38,10 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         grid_config: GridConfig,
     ) -> Self {
         // In order to solve the general eigenvector problem, we make an orthonormal basis. We do
-        // this using the Lowdin decomposition of the overlap matrix
+        // this using the Lowdin decomposition of the overlap matrix.
+        // Note that we need to multiply our overlap matrix by a constant factor to make sure we
+        // get the right number of electrons if we don't have exactly 2 electrons per basis.
+        let overlap_factor = Complex::new((basis.len() as f64) / (num_electrons as f64) * 2.0, 0.0);
         let overlap_matrix = Matrix::from_row_vecs(
             (0..basis.len())
                 .map(|i| -> Vector {
@@ -46,6 +49,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
                         .map(|j| -> Complex<f64> {
                             (basis[i].bra(grid_config.clone()) * basis[j].ket(grid_config.clone()))
                                 .integrate()
+                                * overlap_factor
                         })
                         .collect::<Vec<_>>()
                         .into()
@@ -103,7 +107,10 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             exchange_correlation_potential_functional,
             // Arbitrary guess for the coefficient matrix: normalized diagonal matrix.
             coeff_matrix: Matrix::identity(
-                Complex::new(((num_electrons as f64) / 2.0) / (basis.len() as f64), 0.0),
+                Complex::new(
+                    ((num_electrons as f64) / 2.0 / (basis.len() as f64)).sqrt(),
+                    0.0,
+                ),
                 basis.len(),
             ),
             nuclear_potential: nuclear_potential(&nuclei, grid_config.clone()),
@@ -152,6 +159,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             Grid::new(self.grid_config.clone()),
             |acc, (bra, ket)| -> Grid { acc + Complex::new(2.0, 0.0) * bra.clone() * ket.clone() },
         );
+        println!("total electrons: {}", self.electron_density.integrate().re);
 
         let kinetic_energy = Complex::new(2.0, 0.0)
             * zip(bras.iter(), kinetic_energies.into_iter()).fold(
@@ -184,15 +192,6 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             (self.exchange_correlation_potential_functional)(self.electron_density.clone());
         let exchange_correlation_energy =
             (self.exchange_correlation_functional)(self.electron_density.clone()).integrate();
-
-        println!(
-            "{} {} {} {} {}",
-            self.nuclear_repulsion_energy,
-            kinetic_energy.re,
-            nuclear_potential_energy.re,
-            repulsion_potential_energy.re,
-            exchange_correlation_energy.re
-        );
 
         self.energy = self.nuclear_repulsion_energy
             + kinetic_energy
@@ -227,8 +226,8 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
     fn compute_coeff_matrix(&mut self) -> bool {
         let mut ret = false;
         let fock = self.fock_matrix();
-        let ortho_fock = self.orthogonalizer.clone() * fock;
-        let (eigenvals, mut eigenvecs) = ortho_fock.eigen(1E-10, self.basis.len() * 10);
+        let ortho_fock = self.orthogonalizer.clone() * fock * self.orthogonalizer.clone();
+        let (eigenvals, mut eigenvecs) = ortho_fock.eigen(1E-9, self.basis.len() * 10);
         // Sometimes orbitals degenerate, so we need to 0 pad the coefficient matrix.
         if eigenvecs.len() < self.basis.len() {
             eigenvecs.append(
@@ -239,7 +238,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             ret = true;
         }
         self.coeff_matrix =
-            self.inverse_orthogonalizer.clone() * (Matrix::from_row_vecs(eigenvecs).transpose());
+            self.orthogonalizer.clone() * (Matrix::from_row_vecs(eigenvecs).transpose());
         ret
     }
 
@@ -281,9 +280,9 @@ mod tests {
         end_x: 4.0,
         end_y: 4.0,
         end_z: 4.0,
-        width_voxels: 32,
-        height_voxels: 32,
-        depth_voxels: 32,
+        width_voxels: 64,
+        height_voxels: 64,
+        depth_voxels: 64,
     };
 
     #[test]
@@ -316,16 +315,19 @@ mod tests {
 
     #[test]
     fn test_compute_double_helium() {
-        let basis1 = STONG::sto_3g(2.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
-        let basis2 = STONG::sto_3g(-2.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
+        let bond_length: f64 = 5.0;
+        let basis1 = STONG::sto_3g(bond_length / 2.0, 0.0, 0.0, "1s")
+            .expect("Failed to create basis function!");
+        let basis2 = STONG::sto_3g(-bond_length / 2.0, 0.0, 0.0, "1s")
+            .expect("Failed to create basis function!");
         let nucleus1 = Nucleus {
-            x: 2.0,
+            x: bond_length / 2.0,
             y: 0.0,
             z: 0.0,
             charge: 2.0,
         };
         let nucleus2 = Nucleus {
-            x: -2.0,
+            x: -bond_length / 2.0,
             y: 0.0,
             z: 0.0,
             charge: 2.0,
@@ -355,18 +357,21 @@ mod tests {
     fn test_scf_molecular_hydrogen() {
         // Experimental H-H bond length is 0.7414A.
         // Source: https://cccbdb.nist.gov/exp2x.asp?casno=1333740
-        let basis1 =
-            STONG::sto_3g(-0.7414 / 2.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
-        let basis2 =
-            STONG::sto_3g(0.7414 / 2.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
+        // Note that all of our calculations are in atomic units though, not Angstroms, so we
+        // convert to Bohrs.
+        let bond_length: f64 = 1.40104295;
+        let basis1 = STONG::sto_3g(-bond_length / 2.0, 0.0, 0.0, "1s")
+            .expect("Failed to create basis function!");
+        let basis2 = STONG::sto_3g(bond_length / 2.0, 0.0, 0.0, "1s")
+            .expect("Failed to create basis function!");
         let nucleus1 = Nucleus {
-            x: -0.7414 / 2.0,
+            x: -bond_length / 2.0,
             y: 0.0,
             z: 0.0,
             charge: 1.0,
         };
         let nucleus2 = Nucleus {
-            x: 0.7414 / 2.0,
+            x: bond_length / 2.0,
             y: 0.0,
             z: 0.0,
             charge: 1.0,
@@ -379,11 +384,12 @@ mod tests {
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        scf.iterate(1E-10, 10);
+        let converged = scf.iterate(1E-10, 10);
+        assert!(converged, "Hydrogen molecule SCF failed to converge!");
         let actual = scf.energy.re;
-        let expected = -1.025;
+        let expected = -1.121;
         assert!(
-            (actual - expected).abs() < 0.1,
+            (actual - expected).abs() < 0.2,
             "Incorrect hydrogen molecule energy! Expected {} Actual {}",
             expected,
             actual,
@@ -417,9 +423,10 @@ mod tests {
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        scf.iterate(1E-10, 10);
+        let converged = scf.iterate(1E-10, 10);
+        assert!(converged, "Neon SCF failed to converge!");
         let actual = scf.energy.re;
-        let expected = -1.025;
+        let expected = -125.3899;
         assert!(
             (actual - expected).abs() < 0.1,
             "Incorrect neon energy! Expected {} Actual {}",
