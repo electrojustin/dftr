@@ -42,36 +42,21 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         // Note that we need to multiply our overlap matrix by a constant factor to make sure we
         // get the right number of electrons if we don't have exactly 2 electrons per basis.
         let overlap_factor = Complex::new((basis.len() as f64) / (num_electrons as f64) * 2.0, 0.0);
-        let overlap_matrix = Matrix::from_row_vecs(
-            (0..basis.len())
-                .map(|i| -> Vector {
-                    (0..basis.len())
-                        .map(|j| -> Complex<f64> {
-                            (basis[i].bra(grid_config.clone()) * basis[j].ket(grid_config.clone()))
-                                .integrate()
-                                * overlap_factor
-                        })
-                        .collect::<Vec<_>>()
-                        .into()
-                })
-                .collect::<Vec<_>>(),
-        );
-        assert!(
-            overlap_matrix.is_symmetric(1E-10),
-            "Overlap matrix not symmetric!"
-        );
-        let (eigenvals, eigenvecs) = overlap_matrix.clone().eigen(1E-10, basis.len() * 100);
-        // Quickly validate overlap matrix eigendecomposition.
-        for (val, vec) in zip(eigenvals.iter(), eigenvecs.iter()) {
-            let expected = *val * vec.clone();
-            let actual = overlap_matrix.clone() * vec.clone();
-            assert!(
-                expected.compare(&actual, 1E-10),
-                "Error in overlap matrix eigen decomposition! Expected: {:?}\nActual: {:?}",
-                expected,
-                actual,
-            );
+        let mut overlap_matrix = vec![vec![Complex::new(0.0, 0.0); basis.len()]; basis.len()];
+        for i in 0..basis.len() {
+            for j in i..basis.len() {
+                let overlap = (basis[i].bra(grid_config.clone())
+                    * basis[j].ket(grid_config.clone()))
+                .integrate()
+                    * overlap_factor;
+                overlap_matrix[i][j] = overlap;
+                overlap_matrix[j][i] = overlap;
+            }
         }
+        let overlap_matrix: Matrix = overlap_matrix
+            .try_into()
+            .expect("Error creating overlap matrix!");
+        let (eigenvals, eigenvecs) = overlap_matrix.clone().eigen(1E-20, basis.len() * 10000);
         let test_eigenvals = eigenvals.clone();
         let eigenvals = Matrix::from_diagonal(
             eigenvals
@@ -81,7 +66,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         );
         let eigenvecs = Matrix::from_row_vecs(eigenvecs).transpose();
         let orthogonalizer = eigenvecs.clone() * eigenvals.clone() * eigenvecs.clone().transpose();
-        let inverse_orthogonalizer = orthogonalizer.clone().inverse(1E-10);
+        let inverse_orthogonalizer = orthogonalizer.clone().inverse(1E-20);
         assert!(
             Matrix::identity(Complex::new(1.0, 0.0), basis.len()).compare(
                 &(inverse_orthogonalizer.clone() * orthogonalizer.clone()),
@@ -91,7 +76,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         );
         assert!(
             overlap_matrix.compare(
-                &(orthogonalizer.clone().transpose() * orthogonalizer.clone()).inverse(1E-10),
+                &(orthogonalizer.clone().transpose() * orthogonalizer.clone()).inverse(1E-20),
                 1E-4
             ),
             "Error orthogonalizing basis! Cannot reconstruct overlap matrix from orthogonalizer."
@@ -193,6 +178,15 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         let exchange_correlation_energy =
             (self.exchange_correlation_functional)(self.electron_density.clone()).integrate();
 
+        println!(
+            "{} {} {} {} {}",
+            self.nuclear_repulsion_energy.re,
+            kinetic_energy.re,
+            nuclear_potential_energy.re,
+            repulsion_potential_energy.re,
+            exchange_correlation_energy.re
+        );
+
         self.energy = self.nuclear_repulsion_energy
             + kinetic_energy
             + nuclear_potential_energy
@@ -201,45 +195,40 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
     }
 
     fn fock_matrix(&mut self) -> Matrix {
-        Matrix::from_row_vecs(
-            (0..self.basis.len())
-                .map(|i| -> Vector {
-                    (0..self.basis.len())
-                        .map(|j| -> Complex<f64> {
-                            (self.basis[i].bra(self.grid_config.clone())
-                                * (self.basis[j].kinetic_energy(self.grid_config.clone())
-                                    + (self.nuclear_potential.clone()
-                                        + self.repulsion_potential.clone()
-                                        + self.exchange_correlation_potential.clone())
-                                        * self.basis[j].ket(self.grid_config.clone())))
-                            .integrate()
-                        })
-                        .collect::<Vec<_>>()
-                        .into()
-                })
-                .collect(),
-        )
+        let mut fock_matrix =
+            vec![vec![Complex::new(0.0, 0.0); self.basis.len()]; self.basis.len()];
+        for i in 0..self.basis.len() {
+            for j in i..self.basis.len() {
+                let entry = (self.basis[i].bra(self.grid_config.clone())
+                    * (self.basis[j].kinetic_energy(self.grid_config.clone())
+                        + (self.nuclear_potential.clone()
+                            + self.repulsion_potential.clone()
+                            + self.exchange_correlation_potential.clone())
+                            * self.basis[j].ket(self.grid_config.clone())))
+                .integrate();
+                fock_matrix[i][j] = entry;
+                fock_matrix[j][i] = entry;
+            }
+        }
+        fock_matrix
+            .try_into()
+            .expect("Error creating overlap matrix!")
     }
 
     // Adapted from https://enccs.github.io/veloxchem-workshop/notebooks/rh-scf/
     // Returns true if orbitals have degenerated, so we should break the SCF loop.
     fn compute_coeff_matrix(&mut self) -> bool {
-        let mut ret = false;
         let fock = self.fock_matrix();
         let ortho_fock = self.orthogonalizer.clone() * fock * self.orthogonalizer.clone();
-        let (eigenvals, mut eigenvecs) = ortho_fock.eigen(1E-9, self.basis.len() * 10);
+        let (_, eigenvecs) = ortho_fock.eigen(1E-10, self.basis.len() * 10000);
         // Sometimes orbitals degenerate, so we need to 0 pad the coefficient matrix.
-        if eigenvecs.len() < self.basis.len() {
-            eigenvecs.append(
-                &mut (eigenvecs.len()..self.basis.len())
-                    .map(|i| -> Vector { vec![Complex::new(0.0, 0.0); self.basis.len()].into() })
-                    .collect(),
-            );
-            ret = true;
+        if eigenvecs.is_empty() {
+            true
+        } else {
+            self.coeff_matrix =
+                self.orthogonalizer.clone() * (Matrix::from_row_vecs(eigenvecs).transpose());
+            false
         }
-        self.coeff_matrix =
-            self.orthogonalizer.clone() * (Matrix::from_row_vecs(eigenvecs).transpose());
-        ret
     }
 
     // Returns true on convergence.
@@ -269,6 +258,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
 mod tests {
     use super::*;
     use crate::basis::caching_basis::CachingBasis;
+    use crate::basis::gaussian_type_orbital::GTO;
     use crate::basis::sto_ng::STONG;
     use crate::functional::lda::lda_functional;
     use crate::functional::lda::lda_potential_functional;
@@ -384,9 +374,10 @@ mod tests {
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        let converged = scf.iterate(1E-10, 10);
+        let converged = scf.iterate(1E-20, 10);
         assert!(converged, "Hydrogen molecule SCF failed to converge!");
         let actual = scf.energy.re;
+        // Calculated using PySCF
         let expected = -1.121;
         assert!(
             (actual - expected).abs() < 0.2,
@@ -398,11 +389,24 @@ mod tests {
 
     #[test]
     fn test_scf_neon() {
-        let basis1 = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
-        let basis2 = STONG::sto_3g(0.0, 0.0, 0.0, "2s").expect("Failed to create basis function!");
-        let basis3 = STONG::sto_3g(0.0, 0.0, 0.0, "2p1").expect("Failed to create basis function!");
-        let basis4 = STONG::sto_3g(0.0, 0.0, 0.0, "2p2").expect("Failed to create basis function!");
-        let basis5 = STONG::sto_3g(0.0, 0.0, 0.0, "2p3").expect("Failed to create basis function!");
+        // Adapted from https://www.basissetexchange.org/
+        let basis = vec![
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.2070156070E+03, 0, 0, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.3770815124E+02, 0, 0, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.1020529731E+02, 0, 0, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 0, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 0, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 0, 0, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 1, 0, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 1, 0, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 1, 0, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 1, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 1, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 0, 1, 0)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 0, 1)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 0, 1)),
+            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 0, 0, 1)),
+        ];
         let nucleus = Nucleus {
             x: 0.0,
             y: 0.0,
@@ -411,13 +415,7 @@ mod tests {
         };
         let mut scf = SCF::new(
             vec![nucleus],
-            vec![
-                CachingBasis::new(basis1),
-                CachingBasis::new(basis2),
-                CachingBasis::new(basis3),
-                CachingBasis::new(basis4),
-                CachingBasis::new(basis5),
-            ],
+            basis,
             10,
             |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
@@ -426,6 +424,7 @@ mod tests {
         let converged = scf.iterate(1E-10, 10);
         assert!(converged, "Neon SCF failed to converge!");
         let actual = scf.energy.re;
+        // Calculated using PySCF
         let expected = -125.3899;
         assert!(
             (actual - expected).abs() < 0.1,

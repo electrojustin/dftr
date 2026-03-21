@@ -11,13 +11,14 @@ pub struct Vector(pub Vec<Complex<f64>>);
 
 impl Vector {
     // Compare two vectors, returning true if each element is equal to within the specified
-    // tolerance.
-    pub fn compare(&self, other: &Vector, tolerance: f64) -> bool {
+    // rcond.
+    pub fn compare(&self, other: &Vector, rcond: f64) -> bool {
+        let max = self.max_norm().max(other.max_norm());
         if self.0.len() != other.0.len() {
             return false;
         }
         for i in 0..self.0.len() {
-            if (self.0[i] - other.0[i]).norm_sqr() > tolerance {
+            if (self.0[i] - other.0[i]).norm_sqr() > rcond * max {
                 return false;
             }
         }
@@ -49,6 +50,13 @@ impl Vector {
             }
         }
         true
+    }
+
+    fn max_norm(&self) -> f64 {
+        self.0
+            .iter()
+            .map(|x| -> f64 { x.norm_sqr() })
+            .fold(f64::MIN, |acc, x| -> f64 { x.max(acc) })
     }
 }
 
@@ -135,6 +143,13 @@ impl Matrix {
             .collect()
     }
 
+    fn max_norm(&self) -> f64 {
+        self.data
+            .iter()
+            .map(|x| -> f64 { x.norm_sqr() })
+            .fold(f64::MIN, |acc, x| -> f64 { x.max(acc) })
+    }
+
     // Column view of the matrix.
     pub fn to_col_vecs(&self) -> Vec<Vector> {
         (0..self.width)
@@ -153,15 +168,16 @@ impl Matrix {
     }
 
     // Compare two matrices, returning true if each element is equal to within the specified
-    // tolerance.
-    pub fn compare(&self, other: &Matrix, tolerance: f64) -> bool {
+    // rcond.
+    pub fn compare(&self, other: &Matrix, rcond: f64) -> bool {
+        let max = self.max_norm().max(other.max_norm());
         if self.width != other.width || self.height != other.height {
             return false;
         }
         for y in 0..self.height {
             for x in 0..self.width {
                 if (self.data[y * self.width + x] - other.data[y * self.width + x]).norm_sqr()
-                    > tolerance
+                    > rcond * max
                 {
                     return false;
                 }
@@ -170,16 +186,17 @@ impl Matrix {
         true
     }
 
-    // Returns true if the matrix is symmetric within the specified tolerance.
-    pub fn is_symmetric(&self, tolerance: f64) -> bool {
+    // Returns true if the matrix is symmetric within the specified rcond.
+    pub fn is_symmetric(&self, rcond: f64) -> bool {
         if self.width != self.height {
             return false;
         }
 
+        let max = self.max_norm();
         for i in 0..self.width {
             for j in i..self.width {
                 if (self.data[i * self.width + j] - self.data[j * self.width + i]).norm_sqr()
-                    > tolerance
+                    > rcond * max
                 {
                     return false;
                 }
@@ -218,15 +235,16 @@ impl Matrix {
     }
 
     // Returns true if a matrix is upper triangular, that is, the lower left triangle of the matrix
-    // contains entries that are all zero to within the specified tolerance.
-    pub fn is_triangular(&self, tolerance: f64) -> bool {
+    // contains entries that are all zero to within the specified rcond.
+    pub fn is_triangular(&self, rcond: f64) -> bool {
         if self.width != self.height {
             return false;
         }
 
+        let max = self.max_norm();
         for y in 0..self.height {
             for x in 0..y {
-                if self.data[y * self.width + x].norm_sqr() > tolerance {
+                if self.data[y * self.width + x].norm_sqr() > rcond * max {
                     return false;
                 }
             }
@@ -257,11 +275,8 @@ impl Matrix {
                 None
             };
             if let Some(x) = offset {
-                let coefficient = Complex::new(1.0, 0.0) / lhs_rows[y].0[x];
-                lhs_rows[y] = coefficient * lhs_rows[y].clone();
-                rhs_rows[y] = coefficient * rhs_rows[y].clone();
                 for y2 in (y + 1)..self.height {
-                    let coefficient = lhs_rows[y2].0[x];
+                    let coefficient = lhs_rows[y2].0[x] / lhs_rows[y].0[x];
                     lhs_rows[y2] = lhs_rows[y2].clone() - coefficient * lhs_rows[y].clone();
                     rhs_rows[y2] = rhs_rows[y2].clone() - coefficient * rhs_rows[y].clone();
                 }
@@ -275,13 +290,14 @@ impl Matrix {
     }
 
     // Compute the inverse of the matrix using Gaussian elimination.
-    pub fn inverse(self, tolerance: f64) -> Matrix {
+    pub fn inverse(self, rcond: f64) -> Matrix {
         assert_eq!(self.width, self.height);
+        let max = self.max_norm();
 
         let height = self.height;
         let (lhs, rhs) = self.row_echelon(
             &Matrix::identity(Complex::new(1.0, 0.0), self.width),
-            tolerance,
+            rcond * max,
         );
 
         let mut lhs_rows = lhs.to_row_vecs();
@@ -289,31 +305,43 @@ impl Matrix {
         for i in 0..height {
             let y = height - 1 - i;
             for y2 in 0..y {
-                let coefficient = lhs_rows[y2].0[y];
+                let coefficient = lhs_rows[y2].0[y] / lhs_rows[y].0[y];
                 lhs_rows[y2] = lhs_rows[y2].clone() - coefficient * lhs_rows[y].clone();
                 rhs_rows[y2] = rhs_rows[y2].clone() - coefficient * rhs_rows[y].clone();
             }
+        }
+
+        for y in 0..height {
+            let coefficient = Complex::new(1.0, 0.0) / lhs_rows[y].0[y];
+            rhs_rows[y] = coefficient * rhs_rows[y].clone();
         }
 
         Matrix::from_row_vecs(rhs_rows)
     }
 
     // Compute the kernel (null space) of the matrix using Gaussian elimination.
-    pub fn kernel(&self, tolerance: f64) -> Vec<Vector> {
+    pub fn kernel(&self, rcond: f64) -> Vec<Vector> {
+        let max = self.max_norm();
         let transpose_self = self.clone().transpose();
         let (lhs, rhs) = transpose_self.row_echelon(
             &Matrix::identity(Complex::new(1.0, 0.0), self.width),
-            tolerance,
+            rcond * max,
         );
         let lhs_rows = lhs.to_row_vecs();
         let rhs_rows = rhs.to_row_vecs();
         zip(lhs_rows.into_iter(), rhs_rows.into_iter())
-            .filter_map(|(l, r)| if l.is_zero(tolerance) { Some(r) } else { None })
+            .filter_map(|(l, r)| {
+                if l.is_zero(rcond * max) {
+                    Some(r)
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
     // Implementation of Eigendecomposition by QR algorithm.
-    pub fn eigen(&self, tolerance: f64, max_iters: usize) -> (Vec<Complex<f64>>, Vec<Vector>) {
+    pub fn eigen(&self, rcond: f64, max_iters: usize) -> (Vec<Complex<f64>>, Vec<Vector>) {
         assert_eq!(self.width, self.height);
 
         let mut similar_matrix = self.clone();
@@ -323,7 +351,7 @@ impl Matrix {
                 return (vec![], vec![]);
             }
             // The eigenvalues of triangular matrices are the diagonal.
-            if similar_matrix.is_triangular(tolerance) {
+            if similar_matrix.is_triangular(rcond) {
                 break;
             }
 
@@ -336,24 +364,32 @@ impl Matrix {
         }
 
         let mut eigenvalues: Vec<Complex<f64>> = Vec::new();
+        let max = similar_matrix.max_norm();
         for i in 0..self.width {
             let diag_val = similar_matrix.data[i * self.width + i];
-            if diag_val.norm_sqr() > tolerance {
+            if diag_val.norm_sqr() > rcond * max {
                 eigenvalues.push(diag_val);
             }
         }
 
         let mut dedup_eigenvals: Vec<Complex<f64>> = Vec::new();
+        let mut multiplicities: Vec<usize> = Vec::new();
+        let max = eigenvalues
+            .iter()
+            .map(|x| -> f64 { x.norm_sqr() })
+            .fold(f64::MIN, |acc, x| -> f64 { x.max(acc) });
         for eigenval in eigenvalues.iter() {
             let mut dup = false;
             for prev_eigenval in dedup_eigenvals.iter() {
-                if (eigenval - prev_eigenval).norm_sqr() < tolerance {
+                if (eigenval - prev_eigenval).norm_sqr() < rcond * max {
                     dup = true;
+                    *multiplicities.last_mut().unwrap() += 1;
                     break;
                 }
             }
             if !dup {
                 dedup_eigenvals.push(*eigenval);
+                multiplicities.push(1);
             }
         }
 
@@ -362,29 +398,48 @@ impl Matrix {
         // eigenvalue. The non-zero vectors x which satisfy this equation, i.e. the null space of
         // (A - lambda * I), are the eigenvectors.
         let mut eigenvectors: Vec<Vector> = Vec::new();
-        for eigenval in dedup_eigenvals.iter() {
+        for (eigenval, multiplicity) in zip(dedup_eigenvals.iter(), multiplicities.iter()) {
             // We can have multiple eigenvectors per eigenvalue. In this case, we should return the
             // orthogonal basis for the eigenspace of the corresponding eigenvalues, or else
             // diagonalization won't work because our eigenvectors won't be linearly independent.
             let char_matrix = self.clone() - Matrix::identity(*eigenval, self.width);
-            let mut curr_eigenspace = char_matrix.kernel(tolerance);
+            let max = char_matrix.max_norm();
+            let (_, rhs) = char_matrix.transpose().row_echelon(
+                &Matrix::identity(Complex::new(1.0, 0.0), self.width),
+                rcond * max,
+            );
+            let curr_eigenspace = rhs.to_row_vecs()[self.width - multiplicity..].to_vec();
             let mut ortho_eigenspace: Vec<Vector> = Vec::new();
             for mut eigenvec in curr_eigenspace.into_iter() {
                 for prev_eigenvec in ortho_eigenspace.iter() {
                     let coeff = eigenvec.proj(prev_eigenvec);
                     eigenvec = eigenvec - (coeff * prev_eigenvec.clone());
-                    if eigenvec.is_zero(tolerance) {
-                        break;
-                    }
                 }
-                if !eigenvec.is_zero(tolerance) {
-                    let eigenvec = Complex::new(1.0, 0.0) / eigenvec.l2() * eigenvec;
-                    ortho_eigenspace.push(eigenvec.clone());
-                    eigenvectors.push(eigenvec);
-                }
+                let eigenvec = Complex::new(1.0, 0.0) / eigenvec.l2() * eigenvec;
+                ortho_eigenspace.push(eigenvec.clone());
             }
+            eigenvectors.append(&mut ortho_eigenspace);
         }
         (eigenvalues, eigenvectors)
+    }
+}
+
+impl TryFrom<Vec<Vec<Complex<f64>>>> for Matrix {
+    type Error = String;
+
+    fn try_from(value: Vec<Vec<Complex<f64>>>) -> Result<Self, Self::Error> {
+        if value.len() == 0 {
+            return Err("Cannot initialize empty matrix!".into());
+        }
+        let mut row_vecs: Vec<Vector> = Vec::new();
+        let row_len = value[0].len();
+        for row in value.into_iter() {
+            if row.len() != row_len {
+                return Err("Matrix has inconsistent dimensions!".into());
+            }
+            row_vecs.push(row.into());
+        }
+        Ok(Matrix::from_row_vecs(row_vecs))
     }
 }
 
@@ -478,9 +533,9 @@ impl ops::Sub<Matrix> for Matrix {
 
 impl Debug for Matrix {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Matrix: [")?;
+        write!(f, "Matrix: [\n")?;
         for y in 0..self.height {
-            write!(f, "[")?;
+            write!(f, "\t[")?;
             for x in 0..self.width {
                 if x != self.width - 1 {
                     write!(f, "{}, ", self.data[y * self.width + x].re)?;
@@ -651,9 +706,9 @@ mod tests {
             .into(),
             vec![
                 Complex::new(0.0, 0.0),
-                Complex::new(1.0, 0.0),
-                Complex::new(1.0, 0.0),
-                Complex::new(4.0, 0.0),
+                Complex::new(-2.0, 0.0),
+                Complex::new(-2.0, 0.0),
+                Complex::new(-8.0, 0.0),
             ]
             .into(),
             vec![
