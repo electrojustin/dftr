@@ -26,6 +26,7 @@ struct SCF<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> {
     exchange_correlation_potential: Grid,
     orthogonalizer: Matrix,
     inverse_orthogonalizer: Matrix,
+    fock_cache: Vec<Complex<f64>>,
 }
 
 impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
@@ -82,6 +83,25 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             "Error orthogonalizing basis! Cannot reconstruct overlap matrix from orthogonalizer."
         );
 
+        // The nuclear coulombic attraction and kinetic energy terms of the Fock matrix elements
+        // don't depend on electron density and therefore don't change every SCF iteration. We can
+        // calculate these once and skip redoing all the integrals.
+        let mut fock_cache = vec![Complex::new(0.0, 0.0); basis.len() * basis.len()];
+        let nuclear_potential_grid = nuclear_potential(&nuclei, grid_config.clone());
+        for i in 0..basis.len() {
+            for j in i..basis.len() {
+                let core_hamiltonian = (basis[i].bra(grid_config.clone())
+                    * basis[j].kinetic_energy(grid_config.clone()))
+                .integrate()
+                    + (basis[i].bra(grid_config.clone())
+                        * nuclear_potential_grid.clone()
+                        * basis[j].ket(grid_config.clone()))
+                    .integrate();
+                fock_cache[i * basis.len() + j] = core_hamiltonian;
+                fock_cache[j * basis.len() + i] = core_hamiltonian;
+            }
+        }
+
         let default_grid = Grid::new(grid_config.clone());
 
         Self {
@@ -98,13 +118,14 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
                 ),
                 basis.len(),
             ),
-            nuclear_potential: nuclear_potential(&nuclei, grid_config.clone()),
+            nuclear_potential: nuclear_potential_grid,
             grid_config,
             basis,
             orthogonalizer,
             inverse_orthogonalizer,
             repulsion_potential: default_grid.clone(),
             exchange_correlation_potential: default_grid,
+            fock_cache,
         }
     }
 
@@ -200,12 +221,11 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         for i in 0..self.basis.len() {
             for j in i..self.basis.len() {
                 let entry = (self.basis[i].bra(self.grid_config.clone())
-                    * (self.basis[j].kinetic_energy(self.grid_config.clone())
-                        + (self.nuclear_potential.clone()
-                            + self.repulsion_potential.clone()
-                            + self.exchange_correlation_potential.clone())
-                            * self.basis[j].ket(self.grid_config.clone())))
-                .integrate();
+                    + (self.repulsion_potential.clone()
+                        + self.exchange_correlation_potential.clone())
+                        * self.basis[j].ket(self.grid_config.clone()))
+                .integrate()
+                    + self.fock_cache[i * self.basis.len() + j];
                 fock_matrix[i][j] = entry;
                 fock_matrix[j][i] = entry;
             }
