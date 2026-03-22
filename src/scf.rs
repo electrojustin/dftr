@@ -235,13 +235,13 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             .expect("Error creating overlap matrix!")
     }
 
-    // Adapted from https://enccs.github.io/veloxchem-workshop/notebooks/rh-scf/
+    // Adapted from https://enccs.github.io/veloxchem-workshop/notebooks/rh-scf/ and
+    // https://mattermodeling.stackexchange.com/questions/13574/decomposing-hartree-fock-into-orthogonalization-step-and-unitary-transformation
     // Returns true if orbitals have degenerated, so we should break the SCF loop.
     fn compute_coeff_matrix(&mut self) -> bool {
         let fock = self.fock_matrix();
         let ortho_fock = self.orthogonalizer.clone() * fock * self.orthogonalizer.clone();
         let (_, eigenvecs) = ortho_fock.eigen(1E-10, self.basis.len() * 10000);
-        // Sometimes orbitals degenerate, so we need to 0 pad the coefficient matrix.
         if eigenvecs.is_empty() {
             true
         } else {
