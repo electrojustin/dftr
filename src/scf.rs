@@ -264,15 +264,15 @@ mod tests {
     use crate::functional::lda::lda_potential_functional;
 
     const K_GRID_CONFIG: GridConfig = GridConfig {
-        start_x: -3.5,
-        start_y: -3.5,
-        start_z: -3.5,
-        end_x: 3.5,
-        end_y: 3.5,
-        end_z: 3.5,
-        width_voxels: 64,
-        height_voxels: 64,
-        depth_voxels: 64,
+        start_x: -4.0,
+        start_y: -4.0,
+        start_z: -4.0,
+        end_x: 4.0,
+        end_y: 4.0,
+        end_z: 4.0,
+        width_voxels: 128,
+        height_voxels: 128,
+        depth_voxels: 128,
     };
 
     #[test]
@@ -472,7 +472,7 @@ mod tests {
         // Calculated using PySCF
         let expected = -125.3899;
         assert!(
-            (actual - expected).abs() < (0.1 * expected.abs()),
+            (actual - expected).abs() < (0.01 * expected.abs()),
             "Incorrect neon energy! Expected {} Actual {}",
             expected,
             actual,
