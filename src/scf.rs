@@ -12,7 +12,7 @@ use crate::nucleus::nuclear_potential;
 use crate::nucleus::nuclear_repulsion;
 use crate::nucleus::Nucleus;
 
-struct SCF<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> {
+pub struct SCF<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> {
     pub electron_density: Grid,
     pub energy: Complex<f64>,
     nuclear_repulsion_energy: Complex<f64>,
@@ -252,7 +252,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
     }
 
     // Returns true on convergence.
-    fn iterate(&mut self, tolerance: f64, max_iters: usize) -> bool {
+    pub fn iterate(&mut self, tolerance: f64, max_iters: usize) -> bool {
         self.compute_energy_and_density();
 
         for i in 0..max_iters {
