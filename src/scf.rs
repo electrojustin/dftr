@@ -264,15 +264,15 @@ mod tests {
     use crate::functional::lda::lda_potential_functional;
 
     const K_GRID_CONFIG: GridConfig = GridConfig {
-        start_x: -4.0,
-        start_y: -4.0,
-        start_z: -4.0,
-        end_x: 4.0,
-        end_y: 4.0,
-        end_z: 4.0,
-        width_voxels: 128,
-        height_voxels: 128,
-        depth_voxels: 128,
+        start_x: -5.0,
+        start_y: -5.0,
+        start_z: -5.0,
+        end_x: 5.0,
+        end_y: 5.0,
+        end_z: 5.0,
+        width_voxels: 64,
+        height_voxels: 64,
+        depth_voxels: 64,
     };
 
     #[test]
@@ -336,7 +336,7 @@ mod tests {
         let actual = scf.energy.re;
         let expected = -2.9034 * 2.0;
         assert!(
-            (actual - expected).abs() < 0.5,
+            (actual - expected).abs() < 0.3,
             "Incorrect double helium energy! Expected {} Actual {}",
             expected,
             actual,

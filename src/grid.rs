@@ -93,11 +93,11 @@ impl Grid {
     }
 
     pub fn map(&mut self, func: &impl Fn(f64, f64, f64, Complex<f64>) -> Complex<f64>) {
-        let mut z = self.config.start_z;
+        let mut z = self.config.start_z + self.z_res() / 2.0;
         for z_idx in 0..self.config.depth_voxels {
-            let mut y = self.config.start_y;
+            let mut y = self.config.start_y + self.y_res() / 2.0;
             for y_idx in 0..self.config.height_voxels {
-                let mut x = self.config.start_x;
+                let mut x = self.config.start_x + self.x_res() / 2.0;
                 for x_idx in 0..self.config.width_voxels {
                     let old_data =
                         self.data[z_idx * self.config.width_voxels * self.config.height_voxels
