@@ -7,27 +7,27 @@ use crate::basis::Basis;
 
 // Fixed linear combination of more primitive orbitals, usually GTOs.
 #[derive(Debug, Clone)]
-pub struct STONG<T: Basis> {
+pub struct ContractedBasis<T: Basis> {
     delegates: Vec<T>,
     coefficients: Vec<Complex<f64>>,
 }
 
-impl<T: Basis> STONG<T> {
+impl<T: Basis> ContractedBasis<T> {
     pub fn new(delegates: Vec<T>, coefficients: Vec<Complex<f64>>) -> Self {
-        STONG {
+        ContractedBasis {
             delegates,
             coefficients,
         }
     }
 }
 
-impl STONG<GTO> {
+impl ContractedBasis<GTO> {
     // Adapted from https://en.wikipedia.org/wiki/STO-nG_basis_sets
     // WARNING: These basis sets don't seem to be appropriate for anything other than hydrogen and
     // helium. Check https://www.basissetexchange.org/ for real basis sets.
-    pub fn sto_2g(x: f64, y: f64, z: f64, shell: &str) -> Result<STONG<GTO>, String> {
+    pub fn sto_2g(x: f64, y: f64, z: f64, shell: &str) -> Result<ContractedBasis<GTO>, String> {
         match shell {
-            "1s" => Ok(STONG::new(
+            "1s" => Ok(ContractedBasis::new(
                 vec![
                     GTO::new(x, y, z, 0.151632, 0, 0, 0, true),
                     GTO::new(x, y, z, 0.851819, 0, 0, 0, true),
@@ -38,9 +38,9 @@ impl STONG<GTO> {
         }
     }
 
-    pub fn sto_3g(x: f64, y: f64, z: f64, shell: &str) -> Result<STONG<GTO>, String> {
+    pub fn sto_3g(x: f64, y: f64, z: f64, shell: &str) -> Result<ContractedBasis<GTO>, String> {
         match shell {
-            "1s" => Ok(STONG::new(
+            "1s" => Ok(ContractedBasis::new(
                 vec![
                     GTO::new(x, y, z, 2.22766, 0, 0, 0, true),
                     GTO::new(x, y, z, 0.405771, 0, 0, 0, true),
@@ -52,7 +52,7 @@ impl STONG<GTO> {
                     Complex::new(0.444635, 0.0),
                 ],
             )),
-            "2s" => Ok(STONG::new(
+            "2s" => Ok(ContractedBasis::new(
                 vec![
                     GTO::new(x, y, z, 0.994203, 0, 0, 0, true),
                     GTO::new(x, y, z, 0.231031, 0, 0, 0, true),
@@ -64,7 +64,7 @@ impl STONG<GTO> {
                     Complex::new(0.700115, 0.0),
                 ],
             )),
-            "2p1" => Ok(STONG::new(
+            "2p1" => Ok(ContractedBasis::new(
                 vec![
                     GTO::new(x, y, z, 0.994203, 1, 0, 0, true),
                     GTO::new(x, y, z, 0.231031, 1, 0, 0, true),
@@ -76,7 +76,7 @@ impl STONG<GTO> {
                     Complex::new(0.391957, 0.0),
                 ],
             )),
-            "2p2" => Ok(STONG::new(
+            "2p2" => Ok(ContractedBasis::new(
                 vec![
                     GTO::new(x, y, z, 0.994203, 0, 1, 0, true),
                     GTO::new(x, y, z, 0.231031, 0, 1, 0, true),
@@ -88,7 +88,7 @@ impl STONG<GTO> {
                     Complex::new(0.391957, 0.0),
                 ],
             )),
-            "2p3" => Ok(STONG::new(
+            "2p3" => Ok(ContractedBasis::new(
                 vec![
                     GTO::new(x, y, z, 0.994203, 0, 0, 1, true),
                     GTO::new(x, y, z, 0.231031, 0, 0, 1, true),
@@ -105,7 +105,7 @@ impl STONG<GTO> {
     }
 }
 
-impl<T: Basis> Basis for STONG<T> {
+impl<T: Basis> Basis for ContractedBasis<T> {
     fn pos(&self, x: f64, y: f64, z: f64) -> Complex<f64> {
         zip(self.delegates.iter(), self.coefficients.iter())
             .fold(Complex::new(0.0, 0.0), |acc, (d, c)| -> Complex<f64> {
@@ -145,7 +145,8 @@ mod tests {
 
     #[test]
     fn test_sto3g_normalized() {
-        let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
+        let mut test =
+            ContractedBasis::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
         let integral = (test.bra(K_GRID_CONFIG) * test.ket(K_GRID_CONFIG))
             .integrate()
             .re;
@@ -155,7 +156,8 @@ mod tests {
             integral
         );
 
-        let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "2s").expect("Failed to create STO-3G 2s!");
+        let mut test =
+            ContractedBasis::sto_3g(0.0, 0.0, 0.0, "2s").expect("Failed to create STO-3G 2s!");
         let integral = (test.bra(K_GRID_CONFIG) * test.ket(K_GRID_CONFIG))
             .integrate()
             .re;
@@ -165,7 +167,8 @@ mod tests {
             integral
         );
 
-        let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "2p1").expect("Failed to create STO-3G 2p!");
+        let mut test =
+            ContractedBasis::sto_3g(0.0, 0.0, 0.0, "2p1").expect("Failed to create STO-3G 2p!");
         let integral = (test.bra(K_GRID_CONFIG) * test.ket(K_GRID_CONFIG))
             .integrate()
             .re;
@@ -179,7 +182,8 @@ mod tests {
     // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
     #[test]
     fn test_helium_sto2g() {
-        let mut test = STONG::sto_2g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
+        let mut test =
+            ContractedBasis::sto_2g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
         let bra = test.bra(K_GRID_CONFIG);
         let ket = test.ket(K_GRID_CONFIG);
         let ke = test.kinetic_energy(K_GRID_CONFIG);
@@ -213,7 +217,8 @@ mod tests {
     // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
     #[test]
     fn test_helium_sto3g() {
-        let mut test = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
+        let mut test =
+            ContractedBasis::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create STO-3G 1s!");
         let bra = test.bra(K_GRID_CONFIG);
         let ket = test.ket(K_GRID_CONFIG);
         let ke = test.kinetic_energy(K_GRID_CONFIG);

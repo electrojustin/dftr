@@ -278,8 +278,8 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
 mod tests {
     use super::*;
     use crate::basis::caching_basis::CachingBasis;
+    use crate::basis::contracted_basis::ContractedBasis;
     use crate::basis::gaussian_type_orbital::GTO;
-    use crate::basis::sto_ng::STONG;
     use crate::functional::lda::lda_functional;
     use crate::functional::lda::lda_potential_functional;
 
@@ -297,7 +297,8 @@ mod tests {
 
     #[test]
     fn test_compute_helium_energy() {
-        let basis = STONG::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
+        let basis =
+            ContractedBasis::sto_3g(0.0, 0.0, 0.0, "1s").expect("Failed to create basis function!");
         let nucleus = Nucleus {
             x: 0.0,
             y: 0.0,
@@ -326,9 +327,9 @@ mod tests {
     #[test]
     fn test_compute_double_helium() {
         let bond_length: f64 = 5.0;
-        let basis1 = STONG::sto_3g(bond_length / 2.0, 0.0, 0.0, "1s")
+        let basis1 = ContractedBasis::sto_3g(bond_length / 2.0, 0.0, 0.0, "1s")
             .expect("Failed to create basis function!");
-        let basis2 = STONG::sto_3g(-bond_length / 2.0, 0.0, 0.0, "1s")
+        let basis2 = ContractedBasis::sto_3g(-bond_length / 2.0, 0.0, 0.0, "1s")
             .expect("Failed to create basis function!");
         let nucleus1 = Nucleus {
             x: bond_length / 2.0,
@@ -370,9 +371,9 @@ mod tests {
         // Note that all of our calculations are in atomic units though, not Angstroms, so we
         // convert to Bohrs.
         let bond_length: f64 = 1.40104295;
-        let basis1 = STONG::sto_3g(-bond_length / 2.0, 0.0, 0.0, "1s")
+        let basis1 = ContractedBasis::sto_3g(-bond_length / 2.0, 0.0, 0.0, "1s")
             .expect("Failed to create basis function!");
-        let basis2 = STONG::sto_3g(bond_length / 2.0, 0.0, 0.0, "1s")
+        let basis2 = ContractedBasis::sto_3g(bond_length / 2.0, 0.0, 0.0, "1s")
             .expect("Failed to create basis function!");
         let nucleus1 = Nucleus {
             x: -bond_length / 2.0,
@@ -411,7 +412,7 @@ mod tests {
     fn test_scf_neon() {
         // Adapted from https://www.basissetexchange.org/
         let basis = vec![
-            CachingBasis::new(STONG::new(
+            CachingBasis::new(ContractedBasis::new(
                 vec![
                     GTO::new(0.0, 0.0, 0.0, 0.2070156070E+03, 0, 0, 0, false),
                     GTO::new(0.0, 0.0, 0.0, 0.3770815124E+02, 0, 0, 0, false),
@@ -423,7 +424,7 @@ mod tests {
                     Complex::new(0.444635, 0.0),
                 ],
             )),
-            CachingBasis::new(STONG::new(
+            CachingBasis::new(ContractedBasis::new(
                 vec![
                     GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 0, 0, false),
                     GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 0, 0, false),
@@ -435,7 +436,7 @@ mod tests {
                     Complex::new(0.7001154689e+00, 0.0),
                 ],
             )),
-            CachingBasis::new(STONG::new(
+            CachingBasis::new(ContractedBasis::new(
                 vec![
                     GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 1, 0, 0, false),
                     GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 1, 0, 0, false),
@@ -447,7 +448,7 @@ mod tests {
                     Complex::new(0.3919573931E+00, 0.0),
                 ],
             )),
-            CachingBasis::new(STONG::new(
+            CachingBasis::new(ContractedBasis::new(
                 vec![
                     GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 1, 0, false),
                     GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 1, 0, false),
@@ -459,7 +460,7 @@ mod tests {
                     Complex::new(0.3919573931E+00, 0.0),
                 ],
             )),
-            CachingBasis::new(STONG::new(
+            CachingBasis::new(ContractedBasis::new(
                 vec![
                     GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 0, 1, false),
                     GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 0, 1, false),

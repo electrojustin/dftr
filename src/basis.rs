@@ -6,8 +6,8 @@ use crate::grid::Grid;
 use crate::grid::GridConfig;
 
 pub mod caching_basis;
+pub mod contracted_basis;
 pub mod gaussian_type_orbital;
-pub mod sto_ng;
 
 pub trait Basis: Debug + Clone {
     // Evaluate the position operator at coordinates (x, y, z).
