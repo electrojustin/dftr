@@ -91,7 +91,7 @@ pub fn fft(
     shift: usize,
     inverse: bool,
 ) {
-    let ret = slow_dft(input, n, stride, offset, inverse);
+    let ret = fft_helper(input, n, stride, offset, inverse);
     let sampling_interval = if inverse {
         1.0 / sampling_interval
     } else {
