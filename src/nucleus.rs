@@ -70,7 +70,7 @@ mod tests {
     // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
     #[test]
     fn test_hydrogen_nuclear_potential() {
-        let mut test_gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0);
+        let mut test_gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0, true);
         let bra = test_gto.bra(K_GRID_CONFIG);
         let ket = test_gto.ket(K_GRID_CONFIG);
         let potential = nuclear_potential(

@@ -38,7 +38,16 @@ pub struct GTO {
 }
 
 impl GTO {
-    pub fn new(x: f64, y: f64, z: f64, alpha: f64, i: i32, j: i32, k: i32) -> Self {
+    pub fn new(
+        x: f64,
+        y: f64,
+        z: f64,
+        alpha: f64,
+        i: i32,
+        j: i32,
+        k: i32,
+        normalize: bool,
+    ) -> Self {
         GTO {
             x,
             y,
@@ -47,7 +56,11 @@ impl GTO {
             i,
             j,
             k,
-            norm: gto_norm_helper(alpha, i, j, k),
+            norm: if normalize {
+                gto_norm_helper(alpha, i, j, k)
+            } else {
+                1.0
+            },
         }
     }
 }
@@ -179,7 +192,7 @@ mod tests {
 
     #[test]
     fn test_normalized() {
-        let mut test_gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0);
+        let mut test_gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0, true);
         let bra = test_gto.bra(K_GRID_CONFIG);
         let ket = test_gto.ket(K_GRID_CONFIG);
         let integral = (bra.clone() * ket.clone()).integrate().re;
@@ -190,7 +203,7 @@ mod tests {
             integral
         );
 
-        let mut test_gto = GTO::new(0.0, 0.0, 0.0, 0.25, 1, 0, 0);
+        let mut test_gto = GTO::new(0.0, 0.0, 0.0, 0.25, 1, 0, 0, true);
         test_gto.bra(K_GRID_CONFIG);
         test_gto.ket(K_GRID_CONFIG);
         let integral = (bra * ket).integrate().re;
@@ -205,16 +218,18 @@ mod tests {
     // Reference value adapted from https://pubs.acs.org/doi/10.1021/ed5004788
     #[test]
     fn test_kinetic_energy() {
-        let mut test_gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0);
+        let alpha = 1.0;
+        let mut test_gto = GTO::new(0.0, 0.0, 0.0, alpha, 0, 0, 0, true);
         let bra = test_gto.bra(K_GRID_CONFIG);
         let ket = test_gto.ket(K_GRID_CONFIG);
         let kinetic_energy = test_gto.kinetic_energy(K_GRID_CONFIG);
         let integral = (bra * kinetic_energy).integrate().re;
+        let expected = 1.5 * alpha;
         assert!(
-            (integral - 1.5 * 0.25).abs() < 0.1,
+            (integral - expected).abs() < 0.1,
             "Incorrect kinetic energy! Expected {} Actual {}",
-            1.5 * 0.25,
-            integral
+            expected,
+            integral,
         );
     }
 }

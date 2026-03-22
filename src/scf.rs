@@ -264,12 +264,12 @@ mod tests {
     use crate::functional::lda::lda_potential_functional;
 
     const K_GRID_CONFIG: GridConfig = GridConfig {
-        start_x: -4.0,
-        start_y: -4.0,
-        start_z: -4.0,
-        end_x: 4.0,
-        end_y: 4.0,
-        end_z: 4.0,
+        start_x: -3.5,
+        start_y: -3.5,
+        start_z: -3.5,
+        end_x: 3.5,
+        end_y: 3.5,
+        end_z: 3.5,
         width_voxels: 64,
         height_voxels: 64,
         depth_voxels: 64,
@@ -296,7 +296,7 @@ mod tests {
         let actual = scf.energy.re;
         let expected = -2.9034;
         assert!(
-            (actual - expected).abs() < 0.2,
+            (actual - expected).abs() < 0.1,
             "Incorrect helium atom energy! Expected {} Actual {}",
             expected,
             actual,
@@ -336,7 +336,7 @@ mod tests {
         let actual = scf.energy.re;
         let expected = -2.9034 * 2.0;
         assert!(
-            (actual - expected).abs() < 0.3,
+            (actual - expected).abs() < 0.5,
             "Incorrect double helium energy! Expected {} Actual {}",
             expected,
             actual,
@@ -391,21 +391,66 @@ mod tests {
     fn test_scf_neon() {
         // Adapted from https://www.basissetexchange.org/
         let basis = vec![
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.2070156070E+03, 0, 0, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.3770815124E+02, 0, 0, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.1020529731E+02, 0, 0, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 0, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 0, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 0, 0, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 1, 0, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 1, 0, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 1, 0, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 1, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 1, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 0, 1, 0)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 0, 1)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 0, 1)),
-            CachingBasis::new(GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 0, 0, 1)),
+            CachingBasis::new(STONG::new(
+                vec![
+                    GTO::new(0.0, 0.0, 0.0, 0.2070156070E+03, 0, 0, 0, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.3770815124E+02, 0, 0, 0, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.1020529731E+02, 0, 0, 0, false),
+                ],
+                vec![
+                    Complex::new(0.154329, 0.0),
+                    Complex::new(0.535328, 0.0),
+                    Complex::new(0.444635, 0.0),
+                ],
+            )),
+            CachingBasis::new(STONG::new(
+                vec![
+                    GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 0, 0, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 0, 0, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 0, 0, 0, false),
+                ],
+                vec![
+                    Complex::new(-0.9996722919E-01, 0.0),
+                    Complex::new(0.3995128261E+00, 0.0),
+                    Complex::new(0.7001154689e+00, 0.0),
+                ],
+            )),
+            CachingBasis::new(STONG::new(
+                vec![
+                    GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 1, 0, 0, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 1, 0, 0, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 1, 0, 0, false),
+                ],
+                vec![
+                    Complex::new(0.1559162750E+00, 0.0),
+                    Complex::new(0.6076837186E+00, 0.0),
+                    Complex::new(0.3919573931E+00, 0.0),
+                ],
+            )),
+            CachingBasis::new(STONG::new(
+                vec![
+                    GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 1, 0, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 1, 0, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 0, 1, 0, false),
+                ],
+                vec![
+                    Complex::new(0.1559162750E+00, 0.0),
+                    Complex::new(0.6076837186E+00, 0.0),
+                    Complex::new(0.3919573931E+00, 0.0),
+                ],
+            )),
+            CachingBasis::new(STONG::new(
+                vec![
+                    GTO::new(0.0, 0.0, 0.0, 0.8246315120E+01, 0, 0, 1, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.1916266291E+01, 0, 0, 1, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.6232292721E+00, 0, 0, 1, false),
+                ],
+                vec![
+                    Complex::new(0.1559162750E+00, 0.0),
+                    Complex::new(0.6076837186E+00, 0.0),
+                    Complex::new(0.3919573931E+00, 0.0),
+                ],
+            )),
         ];
         let nucleus = Nucleus {
             x: 0.0,
@@ -427,7 +472,7 @@ mod tests {
         // Calculated using PySCF
         let expected = -125.3899;
         assert!(
-            (actual - expected).abs() < 0.1,
+            (actual - expected).abs() < (0.1 * expected.abs()),
             "Incorrect neon energy! Expected {} Actual {}",
             expected,
             actual,

@@ -29,8 +29,8 @@ impl STONG<GTO> {
         match shell {
             "1s" => Ok(STONG::new(
                 vec![
-                    GTO::new(x, y, z, 0.151632, 0, 0, 0),
-                    GTO::new(x, y, z, 0.851819, 0, 0, 0),
+                    GTO::new(x, y, z, 0.151632, 0, 0, 0, true),
+                    GTO::new(x, y, z, 0.851819, 0, 0, 0, true),
                 ],
                 vec![Complex::new(0.678914, 0.0), Complex::new(0.430129, 0.0)],
             )),
@@ -42,9 +42,9 @@ impl STONG<GTO> {
         match shell {
             "1s" => Ok(STONG::new(
                 vec![
-                    GTO::new(x, y, z, 2.22766, 0, 0, 0),
-                    GTO::new(x, y, z, 0.405771, 0, 0, 0),
-                    GTO::new(x, y, z, 0.109818, 0, 0, 0),
+                    GTO::new(x, y, z, 2.22766, 0, 0, 0, true),
+                    GTO::new(x, y, z, 0.405771, 0, 0, 0, true),
+                    GTO::new(x, y, z, 0.109818, 0, 0, 0, true),
                 ],
                 vec![
                     Complex::new(0.154329, 0.0),
@@ -54,9 +54,9 @@ impl STONG<GTO> {
             )),
             "2s" => Ok(STONG::new(
                 vec![
-                    GTO::new(x, y, z, 0.994203, 0, 0, 0),
-                    GTO::new(x, y, z, 0.231031, 0, 0, 0),
-                    GTO::new(x, y, z, 0.0751386, 0, 0, 0),
+                    GTO::new(x, y, z, 0.994203, 0, 0, 0, true),
+                    GTO::new(x, y, z, 0.231031, 0, 0, 0, true),
+                    GTO::new(x, y, z, 0.0751386, 0, 0, 0, true),
                 ],
                 vec![
                     Complex::new(-0.0999672, 0.0),
@@ -66,9 +66,9 @@ impl STONG<GTO> {
             )),
             "2p1" => Ok(STONG::new(
                 vec![
-                    GTO::new(x, y, z, 0.994203, 1, 0, 0),
-                    GTO::new(x, y, z, 0.231031, 1, 0, 0),
-                    GTO::new(x, y, z, 0.0751386, 1, 0, 0),
+                    GTO::new(x, y, z, 0.994203, 1, 0, 0, true),
+                    GTO::new(x, y, z, 0.231031, 1, 0, 0, true),
+                    GTO::new(x, y, z, 0.0751386, 1, 0, 0, true),
                 ],
                 vec![
                     Complex::new(0.155916, 0.0),
@@ -78,9 +78,9 @@ impl STONG<GTO> {
             )),
             "2p2" => Ok(STONG::new(
                 vec![
-                    GTO::new(x, y, z, 0.994203, 0, 1, 0),
-                    GTO::new(x, y, z, 0.231031, 0, 1, 0),
-                    GTO::new(x, y, z, 0.0751386, 0, 1, 0),
+                    GTO::new(x, y, z, 0.994203, 0, 1, 0, true),
+                    GTO::new(x, y, z, 0.231031, 0, 1, 0, true),
+                    GTO::new(x, y, z, 0.0751386, 0, 1, 0, true),
                 ],
                 vec![
                     Complex::new(0.155916, 0.0),
@@ -90,9 +90,9 @@ impl STONG<GTO> {
             )),
             "2p3" => Ok(STONG::new(
                 vec![
-                    GTO::new(x, y, z, 0.994203, 0, 0, 1),
-                    GTO::new(x, y, z, 0.231031, 0, 0, 1),
-                    GTO::new(x, y, z, 0.0751386, 0, 0, 1),
+                    GTO::new(x, y, z, 0.994203, 0, 0, 1, true),
+                    GTO::new(x, y, z, 0.231031, 0, 0, 1, true),
+                    GTO::new(x, y, z, 0.0751386, 0, 0, 1, true),
                 ],
                 vec![
                     Complex::new(0.155916, 0.0),

@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_caching_basis_proxies() {
-        let mut gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0);
+        let mut gto = GTO::new(0.0, 0.0, 0.0, 0.25, 0, 0, 0, true);
         let expected_bra = gto.bra(K_GRID_CONFIG);
         let expected_ket = gto.ket(K_GRID_CONFIG);
         let expected_kinetic_energy = gto.kinetic_energy(K_GRID_CONFIG);

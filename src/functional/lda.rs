@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn test_helium_lda() {
         let alpha = 1.0;
-        let mut test_gto = GTO::new(0.0, 0.0, 0.0, alpha, 0, 0, 0);
+        let mut test_gto = GTO::new(0.0, 0.0, 0.0, alpha, 0, 0, 0, true);
         let bra = test_gto.bra(K_GRID_CONFIG);
         let ket = test_gto.ket(K_GRID_CONFIG);
         let electron_density = Complex::new(2.0, 0.0) * bra.clone() * ket.clone();
