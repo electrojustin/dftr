@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Formatter;
@@ -371,6 +372,13 @@ impl Matrix {
                 eigenvalues.push(diag_val);
             }
         }
+        eigenvalues.sort_by(|a, b| -> Ordering {
+            if a.norm_sqr() < b.norm_sqr() {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        });
 
         let mut dedup_eigenvals: Vec<Complex<f64>> = Vec::new();
         let mut multiplicities: Vec<usize> = Vec::new();
@@ -398,6 +406,7 @@ impl Matrix {
         // eigenvalue. The non-zero vectors x which satisfy this equation, i.e. the null space of
         // (A - lambda * I), are the eigenvectors.
         let mut eigenvectors: Vec<Vector> = Vec::new();
+        println!("dedup eigvals {:?}", dedup_eigenvals);
         for (eigenval, multiplicity) in zip(dedup_eigenvals.iter(), multiplicities.iter()) {
             // We can have multiple eigenvectors per eigenvalue. In this case, we should return the
             // orthogonal basis for the eigenspace of the corresponding eigenvalues, or else
@@ -409,6 +418,7 @@ impl Matrix {
                 rcond * max,
             );
             let curr_eigenspace = rhs.to_row_vecs()[self.width - multiplicity..].to_vec();
+            println!("eigval {:?} eigspace {:?}", eigenval, curr_eigenspace);
             let mut ortho_eigenspace: Vec<Vector> = Vec::new();
             for mut eigenvec in curr_eigenspace.into_iter() {
                 for prev_eigenvec in ortho_eigenspace.iter() {
@@ -836,13 +846,13 @@ mod tests {
             vec![Complex::new(1.0, 0.0), Complex::new(0.0, 0.0)].into(),
             vec![Complex::new(1.0, 0.0), Complex::new(3.0, 0.0)].into(),
         ]);
-        let expected_eigenvals = vec![Complex::new(3.0, 0.0), Complex::new(1.0, 0.0)];
+        let expected_eigenvals = vec![Complex::new(1.0, 0.0), Complex::new(3.0, 0.0)];
         let expected_eigenvecs = vec![
-            Vector::from(vec![Complex::new(0.0, 0.0), Complex::new(1.0, 0.0)]),
             Vector::from(vec![
                 Complex::new(-0.8944271909999159, 0.0),
                 Complex::new(0.4472135954999579, 0.0),
             ]),
+            Vector::from(vec![Complex::new(0.0, 0.0), Complex::new(1.0, 0.0)]),
         ];
         let (actual_eigenvals, actual_eigenvecs) = input.eigen(1E-10, 1000);
         let is_correct = Vector::from(expected_eigenvals.clone())

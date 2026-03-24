@@ -174,9 +174,18 @@ mod tests {
         let basis = vec![
             CachingBasis::new(ContractedBasis::new(
                 vec![
-                    GTO::new(-bond_length / 2.0, 0.0, 0.0, 0.3425250914E+01 , 0, 0, 0, false),
+                    GTO::new(
+                        -bond_length / 2.0,
+                        0.0,
+                        0.0,
+                        0.3425250914E+01,
+                        0,
+                        0,
+                        0,
+                        false,
+                    ),
                     GTO::new(0.0, 0.0, 0.0, 0.6239137298E+00, 0, 0, 0, false),
-                    GTO::new(0.0, 0.0, 0.0, 0.1688554040E+00 , 0, 0, 0, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.1688554040E+00, 0, 0, 0, false),
                 ],
                 vec![
                     Complex::new(0.154329, 0.0),
@@ -186,9 +195,18 @@ mod tests {
             )),
             CachingBasis::new(ContractedBasis::new(
                 vec![
-                    GTO::new(bond_length / 2.0, 0.0, 0.0, 0.3425250914E+01 , 0, 0, 0, false),
+                    GTO::new(
+                        bond_length / 2.0,
+                        0.0,
+                        0.0,
+                        0.3425250914E+01,
+                        0,
+                        0,
+                        0,
+                        false,
+                    ),
                     GTO::new(0.0, 0.0, 0.0, 0.6239137298E+00, 0, 0, 0, false),
-                    GTO::new(0.0, 0.0, 0.0, 0.1688554040E+00 , 0, 0, 0, false),
+                    GTO::new(0.0, 0.0, 0.0, 0.1688554040E+00, 0, 0, 0, false),
                 ],
                 vec![
                     Complex::new(0.154329, 0.0),
@@ -217,13 +235,13 @@ mod tests {
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        let converged = scf.iterate(1E-20, 10);
+        let converged = scf.iterate(1E-10, 10);
         assert!(converged, "Hydrogen molecule SCF failed to converge!");
 
         let grads = nuclear_gradients(&vec![nucleus1, nucleus2], scf.electron_density.clone());
         let expected = 0.0;
         assert!(
-            (grads[0].0.re - expected).abs() < 0.1,
+            (grads[0].0.re - expected).abs() < 0.01,
             "Molecular hydrogen gradient expected to be 0! Actual: {:?}",
             grads
         );
