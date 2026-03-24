@@ -78,7 +78,6 @@ pub fn nuclear_gradients(
         }
         grads.push((grad_x, grad_y, grad_z));
     }
-    println!("{:?}", grads);
 
     for i in 0..nuclei.len() {
         let mut grad_x = electron_density.clone();
@@ -163,20 +162,16 @@ mod tests {
 
     #[test]
     fn test_molecular_hydrogen_gradient() {
-        //////////////////////////////////////////////////////////////////////////////////
-        // This section is copied from the "test_scf_molecular_hydrogen" test in scf.rs //
-        //////////////////////////////////////////////////////////////////////////////////
+        ///////////////////////////////////////////////////////////////////////////////////
+        // This section is adapted from the "test_scf_molecular_hydrogen" test in scf.rs //
+        ///////////////////////////////////////////////////////////////////////////////////
         // Experimental H-H bond length is 0.7414A.
         // Source: https://cccbdb.nist.gov/exp2x.asp?casno=1333740
         // Note that all of our calculations are in atomic units though, not Angstroms, so we
         // convert to Bohrs.
-        let bond_length: f64 = 1.40104295;
-        let basis1 = ContractedBasis::sto_3g(-bond_length / 2.0, 0.0, 0.0, "1s")
-            .expect("Failed to create basis function!");
-        let basis2 = ContractedBasis::sto_3g(bond_length / 2.0, 0.0, 0.0, "1s")
-            .expect("Failed to create basis function!");
+        let bond_length: f64 = 1.4828;
         // Adapted from https://www.basissetexchange.org/
-        /*let basis = vec![
+        let basis = vec![
             CachingBasis::new(ContractedBasis::new(
                 vec![
                     GTO::new(-bond_length / 2.0, 0.0, 0.0, 0.3425250914E+01 , 0, 0, 0, false),
@@ -201,8 +196,7 @@ mod tests {
                     Complex::new(0.444635, 0.0),
                 ],
             )),
-        ];*/
-        let basis = vec![basis1, basis2];
+        ];
         let nucleus1 = Nucleus {
             x: -bond_length / 2.0,
             y: 0.0,
