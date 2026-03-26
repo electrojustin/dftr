@@ -9,6 +9,9 @@ pub fn repulsion_potential_functional(mut electron_density: Grid) -> Grid {
     // grid size, we treat the repulsion potential as a convolution between 1/|r| and p(r),
     // which we can compute efficiently in the frequency domain as a simple multiplication. This
     // reduces the time complexity to that of the FFT algorithm, which is O(N log N).
+    // I first found this idea referenced here: https://docs.onetep.org/cutoff_coulomb.html
+    // But the analytic fourier transforms in this source don't look correct to me, so I just
+    // implemented it numerically...
     let mut potential = electron_density.clone();
     let x_offset = potential.config.start_x;
     let y_offset = potential.config.start_y;
