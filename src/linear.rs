@@ -406,7 +406,6 @@ impl Matrix {
         // eigenvalue. The non-zero vectors x which satisfy this equation, i.e. the null space of
         // (A - lambda * I), are the eigenvectors.
         let mut eigenvectors: Vec<Vector> = Vec::new();
-        println!("dedup eigvals {:?}", dedup_eigenvals);
         for (eigenval, multiplicity) in zip(dedup_eigenvals.iter(), multiplicities.iter()) {
             // We can have multiple eigenvectors per eigenvalue. In this case, we should return the
             // orthogonal basis for the eigenspace of the corresponding eigenvalues, or else
@@ -418,7 +417,6 @@ impl Matrix {
                 rcond * max,
             );
             let curr_eigenspace = rhs.to_row_vecs()[self.width - multiplicity..].to_vec();
-            println!("eigval {:?} eigspace {:?}", eigenval, curr_eigenspace);
             let mut ortho_eigenspace: Vec<Vector> = Vec::new();
             for mut eigenvec in curr_eigenspace.into_iter() {
                 for prev_eigenvec in ortho_eigenspace.iter() {
