@@ -1,10 +1,16 @@
 use std::collections::HashMap;
 use std::fs::read_to_string;
+use std::iter::zip;
 use std::str::FromStr;
 
 use anyhow::anyhow;
 use anyhow::Result;
 use num::complex::Complex;
+
+use crate::basis::caching_basis::CachingBasis;
+use crate::basis::contracted_basis::ContractedBasis;
+use crate::basis::gaussian_type_orbital::GTO;
+use crate::nucleus::Nucleus;
 
 pub fn symbol_to_atomic_number(symbol: &str) -> Result<usize> {
     match symbol {
@@ -173,7 +179,7 @@ pub struct BasisConfig {
     coefficients: Vec<Vec<Complex<f64>>>,
 }
 
-fn parse_basis_config_file(filename: &str) -> Result<HashMap<String, BasisConfig>> {
+pub fn parse_basis_config_file(filename: &str) -> Result<HashMap<String, BasisConfig>> {
     let mut ret: HashMap<String, BasisConfig> = HashMap::new();
     let mut curr_symbol: Option<String> = None;
     let mut curr_orbitals: Vec<String> = vec![];
@@ -251,12 +257,54 @@ fn parse_basis_config_file(filename: &str) -> Result<HashMap<String, BasisConfig
                 curr_symbol = Some(parsed_line);
             } else {
                 curr_orbitals.push(parsed_line);
-                curr_exponents.push(vec![]);
-                curr_coefficients.push(vec![]);
+                curr_exponents.push(Vec::new());
+                curr_coefficients.push(Vec::new());
             }
         }
     }
     Ok(ret)
+}
+
+pub fn get_nuclei_and_basis(
+    element_symbols: &Vec<String>,
+    coords: &Vec<(f64, f64, f64)>,
+    basis_configs: &HashMap<String, BasisConfig>,
+) -> Result<(Vec<Nucleus>, Vec<CachingBasis<ContractedBasis<GTO>>>)> {
+    let mut nuclei: Vec<Nucleus> = Vec::new();
+    let mut basis: Vec<CachingBasis<ContractedBasis<GTO>>> = Vec::new();
+    for (symbol, coord) in zip(element_symbols, coords) {
+        nuclei.push(Nucleus {
+            x: coord.0,
+            y: coord.1,
+            z: coord.2,
+            charge: symbol_to_atomic_number(symbol)? as f64,
+        });
+        let basis_config = basis_configs
+            .get(symbol)
+            .ok_or(anyhow!("No basis found for element {}", symbol))?;
+        for orbital in 0..basis_config.orbital_types.len() {
+            for ijk in shell_to_gto_ijk(&basis_config.orbital_types[orbital])?.iter() {
+                let mut gtos: Vec<GTO> = Vec::new();
+                for sub_basis in 0..basis_config.exponents[orbital].len() {
+                    gtos.push(GTO::new(
+                        coord.0,
+                        coord.1,
+                        coord.2,
+                        basis_config.exponents[orbital][sub_basis],
+                        ijk.0 as i32,
+                        ijk.1 as i32,
+                        ijk.2 as i32,
+                        false,
+                    ));
+                }
+                basis.push(CachingBasis::new(ContractedBasis::new(
+                    gtos,
+                    basis_config.coefficients[orbital].clone(),
+                )));
+            }
+        }
+    }
+    Ok((nuclei, basis))
 }
 
 mod tests {
