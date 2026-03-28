@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::fs::read_to_string;
+use std::str::FromStr;
 
 use anyhow::anyhow;
 use anyhow::Result;
+use num::complex::Complex;
 
 pub fn symbol_to_atomic_number(symbol: &str) -> Result<usize> {
     match symbol {
@@ -163,6 +166,99 @@ pub fn shell_to_gto_ijk(shell: &str) -> Result<Vec<(usize, usize, usize)>> {
         .collect())
 }
 
+#[derive(Debug, Clone)]
+pub struct BasisConfig {
+    orbital_types: Vec<String>,
+    exponents: Vec<Vec<f64>>,
+    coefficients: Vec<Vec<Complex<f64>>>,
+}
+
+fn parse_basis_config_file(filename: &str) -> Result<HashMap<String, BasisConfig>> {
+    let mut ret: HashMap<String, BasisConfig> = HashMap::new();
+    let mut curr_symbol: Option<String> = None;
+    let mut curr_orbitals: Vec<String> = vec![];
+    let mut curr_exponents: Vec<Vec<f64>> = vec![];
+    let mut curr_coefficients: Vec<Vec<Complex<f64>>> = vec![];
+    for line in read_to_string(filename)?.split('\n') {
+        if line.len() == 0 || line.chars().next().unwrap() == '!' {
+            continue;
+        } else if line.chars().next().unwrap() == '*' {
+            if curr_symbol.is_none() {
+                return Err(anyhow!(
+                    "Error parsing basis config! No current element symbol"
+                ));
+            }
+            let curr_symbol = curr_symbol.take().unwrap();
+            let num_orbitals = curr_orbitals.len();
+            for i in 0..num_orbitals {
+                curr_orbitals[i] = curr_orbitals[i].to_lowercase();
+                // Split hybridized SP orbitals into separate S and P orbitals
+                if curr_orbitals[i] == "sp" {
+                    curr_orbitals[i] = "s".to_string();
+                    curr_orbitals.push("p".to_string());
+                    // SP orbitals share exponents
+                    curr_exponents.push(curr_exponents[i].clone());
+                    let sp_coefficients = curr_coefficients[i].clone();
+                    curr_coefficients[i] = vec![];
+                    curr_coefficients.push(vec![]);
+                    // De-interleave SP coefficients
+                    for j in 0..sp_coefficients.len() {
+                        if j % 2 == 0 {
+                            curr_coefficients[i].push(sp_coefficients[j]);
+                        } else {
+                            curr_coefficients
+                                .last_mut()
+                                .unwrap()
+                                .push(sp_coefficients[j]);
+                        }
+                    }
+                }
+            }
+            ret.insert(
+                curr_symbol,
+                BasisConfig {
+                    orbital_types: curr_orbitals,
+                    exponents: curr_exponents,
+                    coefficients: curr_coefficients,
+                },
+            );
+            curr_orbitals = vec![];
+            curr_exponents = vec![];
+            curr_coefficients = vec![];
+        } else if line.chars().next().unwrap() == ' ' {
+            let parsed_line: Vec<&str> = line
+                .split(' ')
+                .filter(|x| -> bool { !x.is_empty() })
+                .collect();
+            if parsed_line.len() < 2 {
+                return Err(anyhow!("Error parsing basis config! No coefficients"));
+            }
+            let exponent = parsed_line[0].replace("D", "E");
+            curr_exponents
+                .last_mut()
+                .unwrap()
+                .push(f64::from_str(&exponent)?);
+            for i in 1..parsed_line.len() {
+                let mut coefficient = parsed_line[i].replace("D", "E");
+                curr_coefficients
+                    .last_mut()
+                    .unwrap()
+                    .push(Complex::new(f64::from_str(&coefficient)?, 0.0));
+            }
+        } else {
+            let parsed_line = line.split(' ').next().unwrap().to_string();
+            if curr_symbol.is_none() {
+                curr_symbol = Some(parsed_line);
+            } else {
+                curr_orbitals.push(parsed_line);
+                curr_exponents.push(vec![]);
+                curr_coefficients.push(vec![]);
+            }
+        }
+    }
+    Ok(ret)
+}
+
 mod tests {
     use super::*;
 
@@ -197,6 +293,26 @@ mod tests {
         assert!(
             ijks.contains(&(1, 1, 0)),
             "Error in shells_to_gto_ijk! No combo (1, 1, 0)"
+        );
+    }
+
+    #[test]
+    fn test_parse_sto_3g() {
+        let basis_configs = parse_basis_config_file(
+            &(env!("CARGO_MANIFEST_DIR").to_string() + "/src/basis/sto_3g.dat"),
+        )
+        .expect("Error parsing STO-3G file!");
+        let hydrogen_config = basis_configs.get("H").expect("No config for hydrogen!");
+        let is_correct = hydrogen_config.orbital_types.len() == 1
+            && hydrogen_config.exponents.len() == 1
+            && hydrogen_config.coefficients.len() == 1
+            && hydrogen_config.orbital_types[0] == "s"
+            && hydrogen_config.exponents[0].len() == 3
+            && hydrogen_config.coefficients[0].len() == 3;
+        assert!(
+            is_correct,
+            "Hydrogen parsed incorrectly! {:?}",
+            hydrogen_config
         );
     }
 }
