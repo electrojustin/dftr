@@ -1,4 +1,5 @@
 mod basis;
+mod elements;
 mod functional;
 mod grid;
 mod linear;

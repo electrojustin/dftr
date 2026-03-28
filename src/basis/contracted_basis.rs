@@ -1,5 +1,7 @@
 use std::iter::zip;
 
+use anyhow::anyhow;
+use anyhow::Result;
 use num::complex::Complex;
 
 use crate::basis::gaussian_type_orbital::GTO;
@@ -25,7 +27,7 @@ impl ContractedBasis<GTO> {
     // Adapted from https://en.wikipedia.org/wiki/STO-nG_basis_sets
     // WARNING: These basis sets don't seem to be appropriate for anything other than hydrogen and
     // helium. Check https://www.basissetexchange.org/ for real basis sets.
-    pub fn sto_2g(x: f64, y: f64, z: f64, shell: &str) -> Result<ContractedBasis<GTO>, String> {
+    pub fn sto_2g(x: f64, y: f64, z: f64, shell: &str) -> Result<ContractedBasis<GTO>> {
         match shell {
             "1s" => Ok(ContractedBasis::new(
                 vec![
@@ -34,11 +36,11 @@ impl ContractedBasis<GTO> {
                 ],
                 vec![Complex::new(0.678914, 0.0), Complex::new(0.430129, 0.0)],
             )),
-            _ => Err(format!("STO-2G presets do not yet support {shell} shell")),
+            _ => Err(anyhow!("STO-2G presets do not yet support {shell} shell")),
         }
     }
 
-    pub fn sto_3g(x: f64, y: f64, z: f64, shell: &str) -> Result<ContractedBasis<GTO>, String> {
+    pub fn sto_3g(x: f64, y: f64, z: f64, shell: &str) -> Result<ContractedBasis<GTO>> {
         match shell {
             "1s" => Ok(ContractedBasis::new(
                 vec![
@@ -100,7 +102,7 @@ impl ContractedBasis<GTO> {
                     Complex::new(0.391957, 0.0),
                 ],
             )),
-            _ => Err(format!("STO-3G presets do not yet support {shell} shell")),
+            _ => Err(anyhow!("STO-3G presets do not yet support {shell} shell")),
         }
     }
 }
