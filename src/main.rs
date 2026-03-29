@@ -83,7 +83,7 @@ struct Args {
     iter_geo: usize,
 
     /// tolerance for geometry optimization convergence
-    #[argh(option, default = "1E-4")]
+    #[argh(option, default = "1E-2")]
     tolerance_geo: f64,
 
     /// damping coefficient for geometry optimization Newton-Raphson
@@ -123,6 +123,7 @@ fn geometry_optimize(
         depth_voxels: args.z_grid,
     };
 
+    let mut prev_energy = Complex::new(0.0, 0.0);
     for iter in 0..args.iter_geo {
         // Recenter coordinates
         let mut center_x = 0.0;
@@ -160,6 +161,13 @@ fn geometry_optimize(
         log::debug!("Running SCF");
         scf_state.iterate(args.tolerance_scf, args.iter_scf)?;
 
+        // Break if energy isn't changing
+        if (scf_state.energy - prev_energy).norm_sqr() < args.tolerance_geo {
+            log::info!("Geometry converged!");
+            return Ok(());
+        }
+        prev_energy = scf_state.energy;
+
         // Compute gradient of nucleus-electron attraction energy with respect to nuclear coordinates
         let grads = nuclear_gradients(&nuclei, scf_state.electron_density.clone());
 
@@ -177,7 +185,8 @@ fn geometry_optimize(
 
         // Optimize geometry using a Newton-Raphson iteration
         let hessian = nuclear_hessian(&nuclei, scf_state.electron_density.clone());
-        let step = Complex::new(args.damping_geo, 0.0) * (hessian.inverse(1E-10) * grads);
+        // TODO: Newton-Raphson doesn't seem to be working too well so I just use regular gradient descent right now.
+        let step = Complex::new(args.damping_geo, 0.0) * grads; //Complex::new(args.damping_geo, 0.0) * (hessian.inverse(1E-10) * grads);
         for i in 0..coords.len() {
             coords[i] = (
                 coords[i].0 - step.0[i * 3].re,

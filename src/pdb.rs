@@ -65,6 +65,10 @@ pub fn write_pdb(
     let mut i = 0;
     for line in read_to_string(template_filename)?.split('\n') {
         let mut line_chars: Vec<char> = line.chars().collect();
+        if line_chars.len() < 66 {
+            out_file.write(format!("{}\n", line).as_bytes());
+            continue;
+        }
         let record_type = line_chars[0..6]
             .iter()
             .collect::<String>()
@@ -72,9 +76,10 @@ pub fn write_pdb(
             .to_string();
         if record_type != "ATOM" && record_type != "HETATM" {
             out_file.write(format!("{}\n", line).as_bytes());
+            continue;
         }
         let coords = format!(
-            "{:>11.3}{:>11.3}{:>11.3}",
+            "{:>8.3}{:>8.3}{:>8.3}",
             bohr_to_angstrom(new_coords[i].0),
             bohr_to_angstrom(new_coords[i].1),
             bohr_to_angstrom(new_coords[i].2)
@@ -82,7 +87,7 @@ pub fn write_pdb(
         line_chars[30..54].copy_from_slice(coords.chars().collect::<Vec<char>>().as_slice());
         // Partial charges are traditionally put in the B-factor field.
         if let Some(charges) = charges.as_ref() {
-            let charge = format!("{:>11.3}", charges[i]);
+            let charge = format!("{:>8.3}", charges[i]);
             line_chars[60..66].copy_from_slice(charge.chars().collect::<Vec<char>>().as_slice());
         }
         i += 1;
