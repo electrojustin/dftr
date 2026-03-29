@@ -6,6 +6,14 @@ use std::str::FromStr;
 use anyhow::anyhow;
 use anyhow::Result;
 
+pub fn angstrom_to_bohr(angstrom: f64) -> f64 {
+    angstrom * 1.88973
+}
+
+pub fn bohr_to_angstrom(bohr: f64) -> f64 {
+    bohr / 1.88973
+}
+
 pub fn parse_pdb(filename: &str) -> Result<(Vec<String>, Vec<(f64, f64, f64)>)> {
     let mut element_symbols: Vec<String> = Vec::new();
     let mut coords: Vec<(f64, f64, f64)> = Vec::new();
@@ -32,7 +40,11 @@ pub fn parse_pdb(filename: &str) -> Result<(Vec<String>, Vec<(f64, f64, f64)>)> 
         let x_coord = f64::from_str(&line_chars[30..38].iter().collect::<String>().trim())?;
         let y_coord = f64::from_str(&line_chars[38..46].iter().collect::<String>().trim())?;
         let z_coord = f64::from_str(&line_chars[46..54].iter().collect::<String>().trim())?;
-        coords.push((x_coord, y_coord, z_coord));
+        coords.push((
+            angstrom_to_bohr(x_coord),
+            angstrom_to_bohr(y_coord),
+            angstrom_to_bohr(z_coord),
+        ));
     }
     Ok((element_symbols, coords))
 }
@@ -40,7 +52,7 @@ pub fn parse_pdb(filename: &str) -> Result<(Vec<String>, Vec<(f64, f64, f64)>)> 
 pub fn write_pdb(
     template_filename: &str,
     output_filename: &str,
-    new_coords: Vec<(f64, f64, f64)>,
+    new_coords: &Vec<(f64, f64, f64)>,
     charges: &Option<Vec<f64>>,
 ) -> Result<()> {
     if let Some(charges) = charges.as_ref() {
@@ -63,7 +75,9 @@ pub fn write_pdb(
         }
         let coords = format!(
             "{:>11.3}{:>11.3}{:>11.3}",
-            new_coords[i].0, new_coords[i].1, new_coords[i].2
+            bohr_to_angstrom(new_coords[i].0),
+            bohr_to_angstrom(new_coords[i].1),
+            bohr_to_angstrom(new_coords[i].2)
         );
         line_chars[30..54].copy_from_slice(coords.chars().collect::<Vec<char>>().as_slice());
         // Partial charges are traditionally put in the B-factor field.
@@ -98,11 +112,11 @@ mod tests {
             && coords[0].0.abs() < 0.1
             && coords[0].1.abs() < 0.1
             && coords[0].2.abs() < 0.1
-            && coords[1].0.abs() - 1.0 < 0.1
+            && (coords[1].0 - 1.88973).abs() < 0.1
             && coords[1].1.abs() < 0.1
             && coords[1].2.abs() < 0.1
             && coords[2].0.abs() < 0.1
-            && coords[2].1.abs() - 1.0 < 0.1
+            && (coords[2].1 - 1.88973).abs() < 0.1
             && coords[2].2.abs() < 0.1;
         assert!(
             is_correct,

@@ -1,5 +1,7 @@
 use std::iter::zip;
 
+use anyhow::anyhow;
+use anyhow::Result;
 use num::complex::Complex;
 
 use crate::basis::Basis;
@@ -32,7 +34,7 @@ pub struct SCF<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> {
 
 impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
     pub fn new(
-        nuclei: Vec<Nucleus>,
+        nuclei: &Vec<Nucleus>,
         mut basis: Vec<B>,
         num_electrons: usize,
         exchange_correlation_functional: XC1,
@@ -41,6 +43,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
     ) -> Self {
         // In order to solve the general eigenvector problem, we make an orthonormal basis. We do
         // this using the Lowdin decomposition of the overlap matrix.
+        log::debug!("Computing overlap matrix");
         let mut overlap_matrix = vec![vec![Complex::new(0.0, 0.0); basis.len()]; basis.len()];
         for i in 0..basis.len() {
             for j in i..basis.len() {
@@ -54,7 +57,8 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         let overlap_matrix: Matrix = overlap_matrix
             .try_into()
             .expect("Error creating overlap matrix!");
-        let (eigenvals, eigenvecs) = overlap_matrix.clone().eigen(1E-20, basis.len() * 10000);
+        log::debug!("Calculating Lowdin decomposition");
+        let (eigenvals, eigenvecs) = overlap_matrix.clone().eigen(1E-10, basis.len() * 10000);
         let test_eigenvals = eigenvals.clone();
         let eigenvals = Matrix::from_diagonal(
             eigenvals
@@ -64,7 +68,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         );
         let eigenvecs = Matrix::from_row_vecs(eigenvecs).transpose();
         let orthogonalizer = eigenvecs.clone() * eigenvals.clone() * eigenvecs.clone().transpose();
-        let inverse_orthogonalizer = orthogonalizer.clone().inverse(1E-20);
+        let inverse_orthogonalizer = orthogonalizer.clone().inverse(1E-10);
         assert!(
             Matrix::identity(Complex::new(1.0, 0.0), basis.len()).compare(
                 &(inverse_orthogonalizer.clone() * orthogonalizer.clone()),
@@ -74,7 +78,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         );
         assert!(
             overlap_matrix.compare(
-                &(orthogonalizer.clone().transpose() * orthogonalizer.clone()).inverse(1E-20),
+                &(orthogonalizer.clone().transpose() * orthogonalizer.clone()).inverse(1E-10),
                 1E-4
             ),
             "Error orthogonalizing basis! Cannot reconstruct overlap matrix from orthogonalizer."
@@ -83,6 +87,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         // The nuclear coulombic attraction and kinetic energy terms of the Fock matrix elements
         // don't depend on electron density and therefore don't change every SCF iteration. We can
         // calculate these once and skip redoing all the integrals.
+        log::debug!("Computing core Hamiltonian");
         let mut fock_cache = vec![Complex::new(0.0, 0.0); basis.len() * basis.len()];
         let nuclear_potential_grid = nuclear_potential(&nuclei, grid_config.clone());
         for i in 0..basis.len() {
@@ -164,7 +169,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             Grid::new(self.grid_config.clone()),
             |acc, (bra, ket)| -> Grid { acc + Complex::new(2.0, 0.0) * bra.clone() * ket.clone() },
         );
-        println!("total electrons: {}", self.electron_density.integrate().re);
+        log::debug!("Total electrons: {}", self.electron_density.integrate().re);
 
         let kinetic_energy = zip(bras.iter(), kinetic_energies.into_iter()).fold(
             Complex::new(0.0, 0.0),
@@ -189,14 +194,20 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         let exchange_correlation_energy =
             (self.exchange_correlation_functional)(self.electron_density.clone()).integrate();
 
-        println!(
-            "{} {} {} {} {}",
-            self.nuclear_repulsion_energy.re,
-            kinetic_energy.re,
-            nuclear_potential_energy.re,
-            repulsion_potential_energy.re,
-            exchange_correlation_energy.re
+        log::debug!(
+            "Nucleus-Nucleus Repulsion: {}",
+            self.nuclear_repulsion_energy.re
         );
+        log::debug!("Kinetic Energy: {}", kinetic_energy.re);
+        log::debug!(
+            "Nucleus-Electron Attraction: {}",
+            nuclear_potential_energy.re
+        );
+        log::debug!(
+            "Electron-Electron Repulsion: {}",
+            repulsion_potential_energy.re
+        );
+        log::debug!("Exchange-Correlation: {}", exchange_correlation_energy.re);
 
         self.energy = self.nuclear_repulsion_energy
             + kinetic_energy
@@ -227,40 +238,39 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
     // Adapted from https://enccs.github.io/veloxchem-workshop/notebooks/rh-scf/ and
     // https://mattermodeling.stackexchange.com/questions/13574/decomposing-hartree-fock-into-orthogonalization-step-and-unitary-transformation
     // Returns true if orbitals have degenerated, so we should break the SCF loop.
-    fn compute_coeff_matrix(&mut self) -> bool {
+    fn compute_coeff_matrix(&mut self) -> Result<()> {
         let fock = self.fock_matrix();
         let ortho_fock = self.orthogonalizer.clone() * fock * self.orthogonalizer.clone();
         let (energy_levels, eigenvecs) = ortho_fock.eigen(1E-10, self.basis.len() * 10000);
         if eigenvecs.is_empty() {
-            true
+            Err(anyhow!(
+                "Empty eigenvecs when solving for coefficient matrix! Orbitals have degenerated"
+            ))
         } else {
             self.coeff_matrix =
                 self.orthogonalizer.clone() * (Matrix::from_row_vecs(eigenvecs).transpose());
-            false
+            Ok(())
         }
     }
 
     // Returns true on convergence.
-    pub fn iterate(&mut self, tolerance: f64, max_iters: usize) -> bool {
+    pub fn iterate(&mut self, tolerance: f64, max_iters: usize) -> Result<()> {
         self.compute_energy_and_density();
 
         for i in 0..max_iters {
             let old_energy = self.energy;
-            println!("Iter: {}  Energy: {}", i, old_energy.re);
-            if self.compute_coeff_matrix() {
-                println!("Orbitals degenerated!");
-                return false;
-            }
+            log::info!("Iter: {}  Energy: {}", i, old_energy.re);
+            self.compute_coeff_matrix()?;
             self.compute_energy_and_density();
             if (old_energy - self.energy).norm_sqr() < tolerance {
-                println!(
-                    "Converged!  Energy: {}\nCoeffs: {:?}",
-                    old_energy.re, self.coeff_matrix
-                );
-                return true;
+                log::info!("Converged! Energy: {}", old_energy.re);
+                log::debug!("Coeffs: {:?}", self.coeff_matrix);
+                return Ok(());
             }
         }
-        false
+        Err(anyhow!(
+            "Reached maximum number of SCF cycles with no convergence!"
+        ))
     }
 }
 
@@ -384,7 +394,7 @@ mod tests {
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        let converged = scf.iterate(1E-10, 10);
+        let converged = scf.iterate(1E-10, 10).is_ok();
         assert!(converged, "Hydrogen molecule SCF failed to converge!");
         let actual = scf.energy.re;
         // Calculated using PySCF
@@ -477,7 +487,7 @@ mod tests {
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        let converged = scf.iterate(1E-10, 10);
+        let converged = scf.iterate(1E-10, 10).is_ok();
         assert!(converged, "Neon SCF failed to converge!");
         let actual = scf.energy.re;
         // Calculated using PySCF

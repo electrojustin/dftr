@@ -154,7 +154,6 @@ pub fn nuclear_hessian(nuclei: &Vec<Nucleus>, electron_density: Grid) -> Matrix 
                         0.0,
                     ) * val
                 });
-                println!("asdf {:?} {:?}", tmp, density_clone.integrate());
                 ret[i * 3][j * 3] = tmp + density_clone.integrate();
 
                 // Calculate d^2E / dy_i^2
@@ -511,7 +510,7 @@ mod tests {
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        let converged = scf.iterate(1E-10, 10);
+        let converged = scf.iterate(1E-10, 10).is_ok();
         assert!(converged, "Hydrogen molecule SCF failed to converge!");
 
         let grads = nuclear_gradients(&vec![nucleus1, nucleus2], scf.electron_density.clone());
@@ -608,7 +607,7 @@ mod tests {
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        let converged = scf.iterate(1E-10, 10);
+        let converged = scf.iterate(1E-10, 10).is_ok();
         assert!(converged, "Hydrogen molecule SCF failed to converge!");
 
         let fake_bond_length = 0.8;
