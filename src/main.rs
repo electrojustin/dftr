@@ -145,6 +145,8 @@ fn geometry_optimize(
             );
         }
 
+        log::debug!("Coords: {:?}", coords);
+
         // Setup nuclei and basis
         let (nuclei, basis) = get_nuclei_and_basis(element_symbols, coords, basis_configs)?;
 
@@ -185,8 +187,7 @@ fn geometry_optimize(
 
         // Optimize geometry using a Newton-Raphson iteration
         let hessian = nuclear_hessian(&nuclei, scf_state.electron_density.clone());
-        // TODO: Newton-Raphson doesn't seem to be working too well so I just use regular gradient descent right now.
-        let step = Complex::new(args.damping_geo, 0.0) * grads; //Complex::new(args.damping_geo, 0.0) * (hessian.inverse(1E-10) * grads);
+        let step = Complex::new(args.damping_geo, 0.0) * (hessian.inverse(1E-10) * grads);
         for i in 0..coords.len() {
             coords[i] = (
                 coords[i].0 - step.0[i * 3].re,
