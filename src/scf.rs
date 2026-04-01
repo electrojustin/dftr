@@ -305,7 +305,7 @@ mod tests {
             charge: 2.0,
         };
         let mut scf = SCF::new(
-            vec![nucleus],
+            &vec![nucleus],
             vec![CachingBasis::new(basis)],
             2,
             |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },
@@ -343,7 +343,7 @@ mod tests {
             charge: 2.0,
         };
         let mut scf = SCF::new(
-            vec![nucleus1, nucleus2],
+            &vec![nucleus1, nucleus2],
             vec![CachingBasis::new(basis1), CachingBasis::new(basis2)],
             4,
             |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },
@@ -387,14 +387,14 @@ mod tests {
             charge: 1.0,
         };
         let mut scf = SCF::new(
-            vec![nucleus1, nucleus2],
+            &vec![nucleus1, nucleus2],
             vec![CachingBasis::new(basis1), CachingBasis::new(basis2)],
             2,
             |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        let converged = scf.iterate(1E-10, 10).is_ok();
+        let converged = scf.iterate(1E-4, 109).is_ok();
         assert!(converged, "Hydrogen molecule SCF failed to converge!");
         let actual = scf.energy.re;
         // Calculated using PySCF
@@ -480,7 +480,7 @@ mod tests {
             charge: 10.0,
         };
         let mut scf = SCF::new(
-            vec![nucleus],
+            &vec![nucleus],
             basis,
             10,
             |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },

@@ -503,7 +503,7 @@ mod tests {
             charge: 1.0,
         };
         let mut scf = SCF::new(
-            vec![nucleus1.clone(), nucleus2.clone()],
+            &vec![nucleus1.clone(), nucleus2.clone()],
             basis,
             2,
             |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },
@@ -600,7 +600,7 @@ mod tests {
             charge: 1.0,
         };
         let mut scf = SCF::new(
-            vec![nucleus1.clone(), nucleus2.clone()],
+            &vec![nucleus1.clone(), nucleus2.clone()],
             basis,
             2,
             |density| -> Grid { lda_functional(density, 1.05 * 2.0 / 3.0) },
