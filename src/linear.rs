@@ -373,7 +373,7 @@ impl Matrix {
             }
         }
         eigenvalues.sort_by(|a, b| -> Ordering {
-            if a.norm_sqr() < b.norm_sqr() {
+            if a.re < b.re {
                 Ordering::Less
             } else {
                 Ordering::Greater
