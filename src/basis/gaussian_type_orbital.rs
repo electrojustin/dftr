@@ -174,6 +174,8 @@ impl Basis for GTO {
 }
 
 mod tests {
+    use test_log::test;
+
     use super::*;
     use crate::grid::Grid;
     use crate::grid::GridConfig;

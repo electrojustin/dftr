@@ -390,6 +390,8 @@ pub fn nuclear_hessian(nuclei: &Vec<Nucleus>, electron_density: Grid) -> Matrix 
 }
 
 mod tests {
+    use test_log::test;
+
     use super::*;
     use crate::basis::caching_basis::CachingBasis;
     use crate::basis::contracted_basis::ContractedBasis;

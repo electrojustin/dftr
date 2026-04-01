@@ -308,6 +308,8 @@ pub fn get_nuclei_and_basis(
 }
 
 mod tests {
+    use test_log::test;
+
     use super::*;
 
     #[test]

@@ -558,6 +558,8 @@ impl Debug for Matrix {
 }
 
 mod tests {
+    use test_log::test;
+
     use super::*;
 
     #[test]

@@ -107,6 +107,8 @@ pub fn fft(
 
 #[cfg(test)]
 mod tests {
+    use test_log::test;
+
     use super::*;
 
     fn compare_arrays(input1: &[Complex<f64>], input2: &[Complex<f64>], tolerance: f64) -> bool {

@@ -124,6 +124,8 @@ impl<T: Basis> Basis for ContractedBasis<T> {
 }
 
 mod tests {
+    use test_log::test;
+
     use super::*;
     use crate::basis::gaussian_type_orbital::GTO;
     use crate::basis::Basis;

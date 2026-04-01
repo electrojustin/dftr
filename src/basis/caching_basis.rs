@@ -58,6 +58,8 @@ impl<T: Basis> Basis for CachingBasis<T> {
 
 #[cfg(test)]
 mod tests {
+    use test_log::test;
+
     use super::*;
     use crate::basis::gaussian_type_orbital::GTO;
     use crate::grid::Grid;

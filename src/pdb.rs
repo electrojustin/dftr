@@ -97,6 +97,8 @@ pub fn write_pdb(
 }
 
 mod tests {
+    use test_log::test;
+
     use super::*;
 
     #[test]

@@ -28,6 +28,8 @@ pub fn repulsion_potential_functional(mut electron_density: Grid) -> Grid {
 }
 
 mod tests {
+    use test_log::test;
+
     use super::*;
     use crate::basis::gaussian_type_orbital::GTO;
     use crate::basis::Basis;

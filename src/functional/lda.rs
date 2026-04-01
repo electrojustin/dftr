@@ -25,6 +25,8 @@ pub fn lda_potential_functional(electron_density: Grid, alpha: f64) -> Grid {
 }
 
 mod tests {
+    use test_log::test;
+
     use super::*;
     use crate::basis::gaussian_type_orbital::GTO;
     use crate::basis::Basis;

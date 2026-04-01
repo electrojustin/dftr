@@ -318,6 +318,8 @@ impl ops::Mul<Grid> for Grid {
 
 #[cfg(test)]
 mod tests {
+    use test_log::test;
+
     use super::*;
 
     const K_GRID_CONFIG: GridConfig = GridConfig {

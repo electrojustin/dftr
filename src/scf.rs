@@ -99,7 +99,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
                         * nuclear_potential_grid.clone()
                         * basis[j].ket(grid_config.clone()))
                     .integrate();
-                fock_cache[i * basis.len() + j] = core_hamiltonian * Complex::new(1.0, 0.0);
+                fock_cache[i * basis.len() + j] = core_hamiltonian * Complex::new(2.0, 0.0);
             }
         }
 
@@ -171,7 +171,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         );
         log::debug!("Total electrons: {}", self.electron_density.integrate().re);
 
-        let kinetic_energy = zip(bras.iter(), kinetic_energies.into_iter()).fold(
+        let kinetic_energy = Complex::new(2.0, 0.0) * zip(bras.iter(), kinetic_energies.into_iter()).fold(
             Complex::new(0.0, 0.0),
             |acc, (bra, kinetic_energy)| -> Complex<f64> {
                 acc + (bra.clone() * kinetic_energy).integrate()
@@ -275,6 +275,8 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
 }
 
 mod tests {
+    use test_log::test;
+
     use super::*;
     use crate::basis::caching_basis::CachingBasis;
     use crate::basis::contracted_basis::ContractedBasis;
@@ -394,14 +396,14 @@ mod tests {
             |density| -> Grid { lda_potential_functional(density, 1.05 * 2.0 / 3.0) },
             K_GRID_CONFIG,
         );
-        let converged = scf.iterate(1E-4, 109).is_ok();
+        let converged = scf.iterate(1E-4, 100).is_ok();
         assert!(converged, "Hydrogen molecule SCF failed to converge!");
         let actual = scf.energy.re;
         // Calculated using PySCF
         let expected = -1.121;
         // TODO: This function is really off. I wonder if it's the basis I'm using?
         assert!(
-            (actual - expected).abs() < 0.2,
+            (actual - expected).abs() < 0.1,
             "Incorrect hydrogen molecule energy! Expected {} Actual {}",
             expected,
             actual,
