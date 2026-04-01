@@ -25,8 +25,8 @@ impl<T: Basis> ContractedBasis<T> {
 
 impl ContractedBasis<GTO> {
     // Adapted from https://en.wikipedia.org/wiki/STO-nG_basis_sets
-    // WARNING: These basis sets don't seem to be appropriate for anything other than hydrogen and
-    // helium. Check https://www.basissetexchange.org/ for real basis sets.
+    // WARNING: These basis sets don't seem to be appropriate for anything other than hydrogen.
+    // Check https://www.basissetexchange.org/ for real basis sets.
     pub fn sto_2g(x: f64, y: f64, z: f64, shell: &str) -> Result<ContractedBasis<GTO>> {
         match shell {
             "1s" => Ok(ContractedBasis::new(

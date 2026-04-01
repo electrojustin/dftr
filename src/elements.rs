@@ -294,7 +294,7 @@ pub fn get_nuclei_and_basis(
                         ijk.0 as i32,
                         ijk.1 as i32,
                         ijk.2 as i32,
-                        false,
+                        true,
                     ));
                 }
                 basis.push(CachingBasis::new(ContractedBasis::new(

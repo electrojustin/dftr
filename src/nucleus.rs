@@ -25,10 +25,10 @@ pub fn nuclear_potential(nuclei: &Vec<Nucleus>, grid_config: GridConfig) -> Grid
                 let disp_x = nucleus.x - x;
                 let disp_y = nucleus.y - y;
                 let disp_z = nucleus.z - z;
-                // Cap the distance at 0.1 A to avoid divide by 0 numerical instability.
+                // Cap the distance at 0.01 A to avoid divide by 0 numerical instability.
                 let distance = (disp_x * disp_x + disp_y * disp_y + disp_z * disp_z)
                     .sqrt()
-                    .max(0.1);
+                    .max(0.01);
                 Complex::new(-nucleus.charge / distance, 0.0)
             })
             .fold(Complex::new(0.0, 0.0), |acc, e| -> Complex<f64> { acc + e })
