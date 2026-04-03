@@ -42,6 +42,41 @@ fn slow_dft(
     ret
 }
 
+pub struct FFTCache {
+    max_n: usize,
+    cache: Vec<Vec<Complex<f64>>>,
+    inverse_cache: Vec<Vec<Complex<f64>>>,
+}
+
+impl FFTCache {
+    pub fn new(max_n: usize) -> Self {
+        let mut cache: Vec<Vec<Complex<f64>>> = Vec::new();
+        let mut inverse_cache: Vec<Vec<Complex<f64>>> = Vec::new();
+        let mut n = max_n;
+        while n % 2 == 0 {
+            let mut row: Vec<Complex<f64>> = Vec::new();
+            let mut inverse_row: Vec<Complex<f64>> = Vec::new();
+            for i in 0..(n / 2) {
+                row.push(
+                    Complex::new(0.0, -2.0 * std::f64::consts::PI / (n as f64) * (i as f64)).exp(),
+                );
+                inverse_row.push(
+                    Complex::new(0.0, 2.0 * std::f64::consts::PI / (n as f64) * (i as f64)).exp(),
+                );
+            }
+            cache.push(row);
+            inverse_cache.push(inverse_row);
+            n /= 2;
+        }
+
+        Self {
+            max_n: max_n,
+            cache: cache,
+            inverse_cache: inverse_cache,
+        }
+    }
+}
+
 // Implementation of Cooley-Tukey FFT
 // https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm
 fn fft_helper(
@@ -50,30 +85,41 @@ fn fft_helper(
     stride: usize,
     offset: usize,
     inverse: bool,
+    cache: &FFTCache,
+    cache_idx: usize,
 ) -> Vec<Complex<f64>> {
     if n == 1 {
         vec![input[offset]]
     } else if n % 2 != 0 {
         slow_dft(input, n, stride, offset, inverse)
     } else {
-        let even = fft_helper(input, n / 2, stride * 2, offset, inverse);
-        let odd = fft_helper(input, n / 2, stride * 2, offset + stride, inverse);
+        let even = fft_helper(
+            input,
+            n / 2,
+            stride * 2,
+            offset,
+            inverse,
+            cache,
+            cache_idx + 1,
+        );
+        let odd = fft_helper(
+            input,
+            n / 2,
+            stride * 2,
+            offset + stride,
+            inverse,
+            cache,
+            cache_idx + 1,
+        );
         let mut ret = vec![Complex::new(0.0, 0.0); n];
         for i in 0..(n / 2) {
             let (p, q) = if inverse {
                 (
                     0.5 * even[i],
-                    0.5 * odd[i]
-                        * Complex::new(0.0, 2.0 * std::f64::consts::PI / (n as f64) * (i as f64))
-                            .exp(),
+                    0.5 * odd[i] * cache.inverse_cache[cache_idx][i],
                 )
             } else {
-                (
-                    even[i],
-                    odd[i]
-                        * Complex::new(0.0, -2.0 * std::f64::consts::PI / (n as f64) * (i as f64))
-                            .exp(),
-                )
+                (even[i], odd[i] * cache.cache[cache_idx][i])
             };
             ret[i] = p + q;
             ret[i + n / 2] = p - q;
@@ -90,8 +136,15 @@ pub fn fft(
     offset: usize,
     shift: usize,
     inverse: bool,
+    cache: Option<&FFTCache>,
 ) {
-    let ret = fft_helper(input, n, stride, offset, inverse);
+    let ret = match cache {
+        Some(cache) => fft_helper(input, n, stride, offset, inverse, cache, 0),
+        None => {
+            let cache = FFTCache::new(n);
+            fft_helper(input, n, stride, offset, inverse, &cache, 0)
+        }
+    };
     let sampling_interval = if inverse {
         1.0 / sampling_interval
     } else {
@@ -147,7 +200,7 @@ mod tests {
             actual_output
         );
         actual_output = test_input.clone();
-        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, false);
+        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, false, None);
         assert!(
             compare_arrays(actual_output.as_slice(), expected_output.as_slice(), 0.01),
             "FFT error!\nExpected {:?}\nActual {:?}",
@@ -162,7 +215,7 @@ mod tests {
             actual_output
         );
         actual_output = expected_output.clone();
-        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, true);
+        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, true, None);
         assert!(
             compare_arrays(actual_output.as_slice(), test_input.as_slice(), 0.01),
             "IFFT error!\nExpected {:?}\nActual {:?}",
@@ -182,7 +235,7 @@ mod tests {
             actual_output
         );
         actual_output = test_input.clone();
-        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, false);
+        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, false, None);
         assert!(
             compare_arrays(actual_output.as_slice(), expected_output.as_slice(), 0.01),
             "FFT error!\nExpected {:?}\nActual {:?}",
@@ -197,7 +250,7 @@ mod tests {
             actual_output
         );
         actual_output = expected_output.clone();
-        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, true);
+        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, true, None);
         assert!(
             compare_arrays(actual_output.as_slice(), test_input.as_slice(), 0.01),
             "IFFT error!\nExpected {:?}\nActual {:?}",
@@ -219,7 +272,7 @@ mod tests {
             actual_output
         );
         actual_output = test_input.clone();
-        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, false);
+        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, false, None);
         assert!(
             compare_arrays(actual_output.as_slice(), expected_output.as_slice(), 0.01),
             "FFT error!\nExpected {:?}\nActual {:?}",
@@ -234,7 +287,7 @@ mod tests {
             actual_output
         );
         actual_output = expected_output.clone();
-        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, true);
+        fft(actual_output.as_mut(), 16, 1.0, 1, 0, 0, true, None);
         assert!(
             compare_arrays(actual_output.as_slice(), test_input.as_slice(), 0.01),
             "IFFT error!\nExpected {:?}\nActual {:?}",
@@ -262,8 +315,8 @@ mod tests {
             let dx = x as f64 - ((size / 2) as f64 - 1.0);
             fft_conv[x] = (1.0 / (dx * dx).sqrt().max(0.01)).into();
         }
-        fft(test_input.as_mut(), size, 1.0, 1, 0, 0, false);
-        fft(fft_conv.as_mut(), size, 1.0, 1, 0, 0, false);
+        fft(test_input.as_mut(), size, 1.0, 1, 0, 0, false, None);
+        fft(fft_conv.as_mut(), size, 1.0, 1, 0, 0, false, None);
         for x in 0..size {
             fft_conv[x] = fft_conv[x] * test_input[x];
         }
@@ -275,6 +328,7 @@ mod tests {
             0,
             size - (size / 2 - 1),
             true,
+            None,
         );
 
         assert!(
@@ -312,10 +366,10 @@ mod tests {
         }
         let fft2d = |data: &mut [Complex<f64>], shift, inverse| -> () {
             for y in 0..size {
-                fft(data, size, 1.0, 1, y * size, shift, inverse);
+                fft(data, size, 1.0, 1, y * size, shift, inverse, None);
             }
             for x in 0..size {
-                fft(data, size, 1.0, size, x, shift, inverse);
+                fft(data, size, 1.0, size, x, shift, inverse, None);
             }
         };
         fft2d(test_input.as_mut(), 0, false);

@@ -6,6 +6,7 @@ use std::ops;
 use num::complex::Complex;
 
 use crate::utils::fft;
+use crate::utils::FFTCache;
 
 #[derive(Debug, Clone)]
 pub struct GridConfig {
@@ -127,6 +128,8 @@ impl Grid {
         } else {
             (0, 0, 0)
         };
+        let x_cache = FFTCache::new(self.config.width_voxels);
+        let y_cache = FFTCache::new(self.config.height_voxels);
         for z_idx in 0..self.config.depth_voxels {
             for y_idx in 0..self.config.height_voxels {
                 fft(
@@ -138,11 +141,10 @@ impl Grid {
                         + y_idx * self.config.width_voxels,
                     x_shift,
                     inverse,
+                    Some(&x_cache),
                 );
             }
-        }
 
-        for z_idx in 0..self.config.depth_voxels {
             for x_idx in 0..self.config.width_voxels {
                 fft(
                     self.data.as_mut(),
@@ -152,9 +154,12 @@ impl Grid {
                     z_idx * self.config.height_voxels * self.config.width_voxels + x_idx,
                     y_shift,
                     inverse,
+                    Some(&y_cache),
                 );
             }
         }
+
+        let z_cache = FFTCache::new(self.config.depth_voxels);
         for y_idx in 0..self.config.height_voxels {
             for x_idx in 0..self.config.width_voxels {
                 fft(
@@ -165,6 +170,7 @@ impl Grid {
                     y_idx * self.config.width_voxels + x_idx,
                     z_shift,
                     inverse,
+                    Some(&z_cache),
                 );
             }
         }
