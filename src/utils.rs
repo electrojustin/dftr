@@ -1,3 +1,9 @@
+use std::alloc::{alloc, dealloc, Layout};
+#[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
+use std::arch::x86_64::*;
+use std::cell::RefCell;
+use std::slice;
+
 use num::Complex;
 
 pub fn factorial(n: i32) -> i32 {
@@ -42,37 +48,104 @@ fn slow_dft(
     ret
 }
 
-pub struct FFTCache {
+const K_SIMD_ALIGNMENT: usize = 64;
+
+pub struct FFTState {
+    scratch: RefCell<&'static mut [Complex<f64>]>,
+    scratch_mem: (*mut u8, Layout),
+    cache: FFTCache,
+}
+
+impl FFTState {
+    pub fn new(n: usize) -> Self {
+        unsafe {
+            let scratch_layout = Layout::array::<Complex<f64>>(n)
+                .unwrap()
+                .align_to(K_SIMD_ALIGNMENT)
+                .unwrap();
+            let scratch_mem = alloc(scratch_layout);
+            let scratch = slice::from_raw_parts_mut(scratch_mem as *mut Complex<f64>, n);
+            Self {
+                scratch: RefCell::new(scratch),
+                scratch_mem: (scratch_mem, scratch_layout),
+                cache: FFTCache::new(n),
+            }
+        }
+    }
+}
+
+impl Drop for FFTState {
+    fn drop(&mut self) {
+        unsafe {
+            dealloc(self.scratch_mem.0, self.scratch_mem.1);
+        }
+    }
+}
+
+struct FFTCache {
     max_n: usize,
-    cache: Vec<Vec<Complex<f64>>>,
-    inverse_cache: Vec<Vec<Complex<f64>>>,
+    cache: Vec<&'static [Complex<f64>]>,
+    cache_mem: Vec<(*mut u8, Layout)>,
+    inverse_cache: Vec<&'static [Complex<f64>]>,
+    inverse_cache_mem: Vec<(*mut u8, Layout)>,
 }
 
 impl FFTCache {
-    pub fn new(max_n: usize) -> Self {
-        let mut cache: Vec<Vec<Complex<f64>>> = Vec::new();
-        let mut inverse_cache: Vec<Vec<Complex<f64>>> = Vec::new();
-        let mut n = max_n;
-        while n % 2 == 0 {
-            let mut row: Vec<Complex<f64>> = Vec::new();
-            let mut inverse_row: Vec<Complex<f64>> = Vec::new();
-            for i in 0..(n / 2) {
-                row.push(
-                    Complex::new(0.0, -2.0 * std::f64::consts::PI / (n as f64) * (i as f64)).exp(),
-                );
-                inverse_row.push(
-                    Complex::new(0.0, 2.0 * std::f64::consts::PI / (n as f64) * (i as f64)).exp(),
-                );
+    fn new(max_n: usize) -> Self {
+        unsafe {
+            let mut cache: Vec<&'static [Complex<f64>]> = Vec::new();
+            let mut cache_mem: Vec<(*mut u8, Layout)> = Vec::new();
+            let mut inverse_cache: Vec<&'static [Complex<f64>]> = Vec::new();
+            let mut inverse_cache_mem: Vec<(*mut u8, Layout)> = Vec::new();
+            let mut n = max_n;
+            while n % 2 == 0 {
+                let row_layout = Layout::array::<Complex<f64>>(n / 2)
+                    .unwrap()
+                    .align_to(K_SIMD_ALIGNMENT)
+                    .unwrap();
+                let row_mem = alloc(row_layout);
+                let inverse_row_mem = alloc(row_layout);
+                let row = slice::from_raw_parts_mut(row_mem as *mut Complex<f64>, n / 2);
+                let inverse_row =
+                    slice::from_raw_parts_mut(inverse_row_mem as *mut Complex<f64>, n / 2);
+                for i in 0..(n / 2) {
+                    row[i] =
+                        Complex::new(0.0, -2.0 * std::f64::consts::PI / (n as f64) * (i as f64))
+                            .exp();
+                    inverse_row[i] =
+                        Complex::new(0.0, 2.0 * std::f64::consts::PI / (n as f64) * (i as f64))
+                            .exp();
+                }
+                cache.push(slice::from_raw_parts(row_mem as *const Complex<f64>, n / 2));
+                cache_mem.push((row_mem, row_layout));
+                inverse_cache.push(slice::from_raw_parts(
+                    inverse_row_mem as *const Complex<f64>,
+                    n / 2,
+                ));
+                inverse_cache_mem.push((inverse_row_mem, row_layout));
+                n /= 2;
             }
-            cache.push(row);
-            inverse_cache.push(inverse_row);
-            n /= 2;
-        }
 
-        Self {
-            max_n: max_n,
-            cache: cache,
-            inverse_cache: inverse_cache,
+            Self {
+                max_n,
+                cache,
+                cache_mem,
+                inverse_cache,
+                inverse_cache_mem,
+            }
+        }
+    }
+}
+
+impl Drop for FFTCache {
+    fn drop(&mut self) {
+        unsafe {
+            for mem in self.cache_mem.drain(..) {
+                dealloc(mem.0, mem.1);
+            }
+            for mem in self.inverse_cache_mem.drain(..) {
+                dealloc(mem.0, mem.1);
+            }
         }
     }
 }
@@ -87,13 +160,15 @@ fn fft_helper(
     inverse: bool,
     cache: &FFTCache,
     cache_idx: usize,
-) -> Vec<Complex<f64>> {
+    output: &mut [Complex<f64>],
+) {
     if n == 1 {
-        vec![input[offset]]
+        output[0] = input[offset];
     } else if n % 2 != 0 {
-        slow_dft(input, n, stride, offset, inverse)
+        output.copy_from_slice(slow_dft(input, n, stride, offset, inverse).as_slice());
     } else {
-        let even = fft_helper(
+        let (even, odd) = output.split_at_mut(n / 2);
+        fft_helper(
             input,
             n / 2,
             stride * 2,
@@ -101,8 +176,9 @@ fn fft_helper(
             inverse,
             cache,
             cache_idx + 1,
+            even,
         );
-        let odd = fft_helper(
+        fft_helper(
             input,
             n / 2,
             stride * 2,
@@ -110,9 +186,57 @@ fn fft_helper(
             inverse,
             cache,
             cache_idx + 1,
+            odd,
         );
-        let mut ret = vec![Complex::new(0.0, 0.0); n];
-        for i in 0..(n / 2) {
+        let mut scalar_start = 0;
+
+        #[cfg(all(target_arch = "x86_64", target_feature = "avx"))]
+        unsafe {
+            scalar_start = (n / 8) * 4;
+            let mut even = even.as_ptr() as *mut f64;
+            let mut odd = odd.as_ptr() as *mut f64;
+            let mut cache = if inverse {
+                cache.inverse_cache[cache_idx].as_ptr() as *const f64
+            } else {
+                cache.cache[cache_idx].as_ptr() as *const f64
+            };
+            let half = _mm256_set1_pd(0.5);
+            for i in (0..(2 * scalar_start)).step_by(8) {
+                let mut p1 = _mm256_loadu_pd(even);
+                let mut p2 = _mm256_loadu_pd(even.offset(4));
+
+                let odd1 = _mm256_loadu_pd(odd);
+                let odd2 = _mm256_loadu_pd(odd.offset(4));
+                let cache1 = _mm256_loadu_pd(cache);
+                cache = cache.offset(4);
+                let cache2 = _mm256_loadu_pd(cache);
+                cache = cache.offset(4);
+                let q_re = _mm256_hsub_pd(_mm256_mul_pd(odd1, cache1), _mm256_mul_pd(odd2, cache2));
+                let odd1 = _mm256_permute_pd(odd1, 0b0101);
+                let odd2 = _mm256_permute_pd(odd2, 0b0101);
+                let q_im = _mm256_hadd_pd(_mm256_mul_pd(odd1, cache1), _mm256_mul_pd(odd2, cache2));
+                let mut q1 = _mm256_unpacklo_pd(q_re, q_im);
+                let mut q2 = _mm256_unpackhi_pd(q_re, q_im);
+
+                if inverse {
+                    p1 = _mm256_mul_pd(half, p1);
+                    p2 = _mm256_mul_pd(half, p2);
+                    q1 = _mm256_mul_pd(half, q1);
+                    q2 = _mm256_mul_pd(half, q2);
+                }
+
+                _mm256_storeu_pd(even, _mm256_add_pd(p1, q1));
+                _mm256_storeu_pd(odd, _mm256_sub_pd(p1, q1));
+                even = even.offset(4);
+                odd = odd.offset(4);
+                _mm256_storeu_pd(even, _mm256_add_pd(p2, q2));
+                _mm256_storeu_pd(odd, _mm256_sub_pd(p2, q2));
+                even = even.offset(4);
+                odd = odd.offset(4);
+            }
+        }
+
+        for i in scalar_start..(n / 2) {
             let (p, q) = if inverse {
                 (
                     0.5 * even[i],
@@ -121,10 +245,9 @@ fn fft_helper(
             } else {
                 (even[i], odd[i] * cache.cache[cache_idx][i])
             };
-            ret[i] = p + q;
-            ret[i + n / 2] = p - q;
+            even[i] = p + q;
+            odd[i] = p - q;
         }
-        ret
     }
 }
 
@@ -136,13 +259,37 @@ pub fn fft(
     offset: usize,
     shift: usize,
     inverse: bool,
-    cache: Option<&FFTCache>,
+    state: Option<&FFTState>,
 ) {
-    let ret = match cache {
-        Some(cache) => fft_helper(input, n, stride, offset, inverse, cache, 0),
+    let mut new_state: Option<FFTState> = None;
+    let state = match state {
+        Some(state) => {
+            fft_helper(
+                input,
+                n,
+                stride,
+                offset,
+                inverse,
+                &state.cache,
+                0,
+                &mut state.scratch.borrow_mut(),
+            );
+            state
+        }
         None => {
-            let cache = FFTCache::new(n);
-            fft_helper(input, n, stride, offset, inverse, &cache, 0)
+            let state = FFTState::new(n);
+            fft_helper(
+                input,
+                n,
+                stride,
+                offset,
+                inverse,
+                &state.cache,
+                0,
+                &mut state.scratch.borrow_mut(),
+            );
+            new_state = Some(state);
+            new_state.as_ref().unwrap()
         }
     };
     let sampling_interval = if inverse {
@@ -151,10 +298,10 @@ pub fn fft(
         sampling_interval
     };
     for i in 0..shift {
-        input[i * stride + offset] = ret[i + n - shift] * sampling_interval;
+        input[i * stride + offset] = state.scratch.borrow()[i + n - shift] * sampling_interval;
     }
     for i in shift..n {
-        input[i * stride + offset] = ret[i - shift] * sampling_interval;
+        input[i * stride + offset] = state.scratch.borrow()[i - shift] * sampling_interval;
     }
 }
 
