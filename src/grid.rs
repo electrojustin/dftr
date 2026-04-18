@@ -68,6 +68,27 @@ impl Grid {
         }
     }
 
+    pub fn linear_combo(grids: &Vec<Grid>, coeffs: Vec<Complex<f64>>) -> Grid {
+        assert!(grids.len() > 0, "Cannot not linearly combine 0 grids!");
+        assert_eq!(grids.len(), coeffs.len());
+
+        for i in 0..grids.len() {
+            if i < grids.len() - 1 {
+                assert_eq!(grids[i].config, grids[i + 1].config);
+            }
+        }
+
+        let mut new_grid = Grid::new(grids[0].config.clone());
+        for j in 0..grids[0].data.len() {
+            let mut acc = Complex::new(0.0, 0.0);
+            for i in 0..grids.len() {
+                acc += grids[i].data[j] * coeffs[i];
+            }
+            new_grid.data[j] = acc;
+        }
+        new_grid
+    }
+
     pub fn fill(&mut self, func: &impl Fn(f64, f64, f64) -> Complex<f64>) {
         self.map(&|x, y, z, _old| -> Complex<f64> { func(x, y, z) });
     }

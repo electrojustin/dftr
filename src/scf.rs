@@ -136,62 +136,59 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
     fn compute_energy_and_density(&mut self) {
         // Compute molecular orbitals from basis function and coefficients.
         let coeffs = self.coeff_matrix.to_col_vecs();
-        let mut bras: Vec<Grid> = Vec::new();
+        let mut electron_densities: Vec<Grid> = Vec::new();
+        let mut kinetic_energy: Complex<f64> = Complex::new(0.0, 0.0);
         let mut kinetic_energies: Vec<Grid> = Vec::new();
-        let mut kets: Vec<Grid> = Vec::new();
         // In molecules, we expected to have more molecular orbitals than electrons to fill them.
         // This results in unoccupied orbitals. We do not count these for our total ground state
         // energy and electron density calculations.
         for orbital in 0..(self.num_electrons / 2) {
-            bras.push(
-                zip(self.basis.iter_mut(), coeffs[orbital].0.iter())
-                    .fold(Grid::new(self.grid_config.clone()), |acc, (x, c)| -> Grid {
-                        acc + *c * x.bra(self.grid_config.clone())
-                    }),
+            let bra = Grid::linear_combo(
+                &self
+                    .basis
+                    .iter_mut()
+                    .map(|x| -> Grid { x.bra(self.grid_config.clone()) })
+                    .collect(),
+                coeffs[orbital].0.clone(),
             );
-            kinetic_energies.push(
-                zip(self.basis.iter_mut(), coeffs[orbital].0.iter())
-                    .fold(Grid::new(self.grid_config.clone()), |acc, (x, c)| -> Grid {
-                        acc + *c * x.kinetic_energy(self.grid_config.clone())
-                    }),
+            let kinetic = Grid::linear_combo(
+                &self
+                    .basis
+                    .iter_mut()
+                    .map(|x| -> Grid { x.kinetic_energy(self.grid_config.clone()) })
+                    .collect(),
+                coeffs[orbital].0.clone(),
             );
-            kets.push(
-                zip(self.basis.iter_mut(), coeffs[orbital].0.iter())
-                    .fold(Grid::new(self.grid_config.clone()), |acc, (x, c)| -> Grid {
-                        acc + *c * x.ket(self.grid_config.clone())
-                    }),
+            let ket = Grid::linear_combo(
+                &self
+                    .basis
+                    .iter_mut()
+                    .map(|x| -> Grid { x.ket(self.grid_config.clone()) })
+                    .collect(),
+                coeffs[orbital].0.clone(),
             );
+            electron_densities.push(bra.clone() * ket);
+
+            // Double the kinetic energy to account for 2 electrons per orbital.
+            kinetic_energy += 2.0 * (bra * kinetic).integrate();
         }
 
         // Currently we only support closed shell systems, so we double the electron density,
         // kinetic energy, and potential energy to account for 2 electrons being present in each
         // molecular orbital. Note that repulsion and exchange energies are not doubled because the
         // electron density already accounts for that.
-        self.electron_density = zip(bras.iter(), kets.iter()).fold(
-            Grid::new(self.grid_config.clone()),
-            |acc, (bra, ket)| -> Grid { acc + Complex::new(2.0, 0.0) * bra.clone() * ket.clone() },
+        self.electron_density = Grid::linear_combo(
+            &electron_densities,
+            vec![Complex::new(2.0, 0.0); electron_densities.len()],
         );
         log::debug!("Total electrons: {}", self.electron_density.integrate().re);
-
-        // Double the kinetic energy to account for 2 electrons per orbital.
-        let kinetic_energy = Complex::new(2.0, 0.0)
-            * zip(bras.iter(), kinetic_energies.into_iter()).fold(
-                Complex::new(0.0, 0.0),
-                |acc, (bra, kinetic_energy)| -> Complex<f64> {
-                    acc + (bra.clone() * kinetic_energy).integrate()
-                },
-            );
 
         let nuclear_potential_energy =
             (self.electron_density.clone() * self.nuclear_potential.clone()).integrate();
 
         self.repulsion_potential = repulsion_potential_functional(self.electron_density.clone());
-        let repulsion_potential_energy = zip(bras.into_iter(), kets.into_iter()).fold(
-            Complex::new(0.0, 0.0),
-            |acc, (bra, ket)| -> Complex<f64> {
-                acc + (bra * self.repulsion_potential.clone() * ket).integrate()
-            },
-        );
+        let repulsion_potential_energy =
+            0.5 * (self.electron_density.clone() * self.repulsion_potential.clone()).integrate();
 
         self.exchange_correlation_potential =
             (self.exchange_correlation_potential_functional)(self.electron_density.clone());
