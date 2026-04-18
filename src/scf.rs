@@ -173,7 +173,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             electron_densities.push(bra.clone() * ket);
 
             // Double the kinetic energy to account for 2 electrons per orbital.
-            kinetic_energy += 2.0 * (bra * kinetic).integrate();
+            kinetic_energy += 2.0 * Grid::inner_product(vec![&bra, &kinetic]);
         }
 
         // Currently we only support closed shell systems, so we double the electron density,
@@ -187,12 +187,12 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         log::debug!("Total electrons: {}", self.electron_density.integrate().re);
 
         let nuclear_potential_energy =
-            (self.electron_density.clone() * self.nuclear_potential.clone()).integrate();
+            Grid::inner_product(vec![&self.electron_density, &self.nuclear_potential]);
 
         self.repulsion_potential =
             repulsion_potential_functional(self.electron_density.clone(), &self.repulsion_cache);
         let repulsion_potential_energy =
-            0.5 * (self.electron_density.clone() * self.repulsion_potential.clone()).integrate();
+            0.5 * Grid::inner_product(vec![&self.electron_density, &self.repulsion_potential]);
 
         self.exchange_correlation_potential =
             (self.exchange_correlation_potential_functional)(self.electron_density.clone());
@@ -226,12 +226,12 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
             vec![vec![Complex::new(0.0, 0.0); self.basis.len()]; self.basis.len()];
         for i in 0..self.basis.len() {
             for j in 0..self.basis.len() {
-                let entry = (self.basis[i].bra(self.grid_config.clone())
-                    * (self.repulsion_potential.clone()
-                        + self.exchange_correlation_potential.clone())
-                    * self.basis[j].ket(self.grid_config.clone()))
-                .integrate()
-                    + self.fock_cache[i * self.basis.len() + j];
+                let entry = Grid::inner_product(vec![
+                    &self.basis[i].bra(self.grid_config.clone()),
+                    &(self.repulsion_potential.clone()
+                        + self.exchange_correlation_potential.clone()),
+                    &self.basis[j].ket(self.grid_config.clone()),
+                ]) + self.fock_cache[i * self.basis.len() + j];
                 fock_matrix[i][j] = entry;
             }
         }

@@ -68,6 +68,8 @@ impl Grid {
         }
     }
 
+    // Faster method of computing a linear combination of grids. The naive method using fold
+    // requires writing a bunch of intermediate grids to memory, which is inefficient.
     pub fn linear_combo(grids: &Vec<Grid>, coeffs: Vec<Complex<f64>>) -> Grid {
         assert!(grids.len() > 0, "Cannot not linearly combine 0 grids!");
         assert_eq!(grids.len(), coeffs.len());
@@ -87,6 +89,32 @@ impl Grid {
             new_grid.data[j] = acc;
         }
         new_grid
+    }
+
+    // Faster method of computing the product followed by the integral of a number of grids. Like
+    // |linear_combo|, this method skips the intermediate writes.
+    pub fn inner_product(grids: Vec<&Grid>) -> Complex<f64> {
+        if grids.len() == 0 {
+            return Complex::new(0.0, 0.0);
+        }
+
+        for i in 0..grids.len() {
+            if i < grids.len() - 1 {
+                assert_eq!(grids[i].config, grids[i + 1].config);
+            }
+        }
+
+        let mut ret = Complex::new(0.0, 0.0);
+        let cubic_res = Complex::new(grids[0].x_res() * grids[0].y_res() * grids[0].z_res(), 0.0);
+        (0..grids[0].data.len())
+            .map(|j| -> Complex<f64> {
+                grids
+                    .iter()
+                    .map(|x| -> Complex<f64> { x.data[j] })
+                    .fold(Complex::new(1.0, 0.0), |acc, x| -> Complex<f64> { acc * x })
+            })
+            .fold(Complex::new(0.0, 0.0), |acc, x| -> Complex<f64> { acc + x })
+            * cubic_res
     }
 
     pub fn fill(&mut self, func: &impl Fn(f64, f64, f64) -> Complex<f64>) {
