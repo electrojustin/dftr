@@ -80,15 +80,16 @@ impl Grid {
             }
         }
 
-        let mut new_grid = Grid::new(grids[0].config.clone());
-        for j in 0..grids[0].data.len() {
-            let mut acc = Complex::new(0.0, 0.0);
-            for i in 0..grids.len() {
-                acc += grids[i].data[j] * coeffs[i];
-            }
-            new_grid.data[j] = acc;
+        Grid {
+            data: (0..grids[0].data.len())
+                .map(|j| -> Complex<f64> {
+                    zip(grids.iter(), coeffs.iter())
+                        .map(|(x, coeff)| -> Complex<f64> { x.data[j] * coeff })
+                        .fold(Complex::new(0.0, 0.0), |acc, x| -> Complex<f64> { acc + x })
+                })
+                .collect(),
+            config: grids[0].config.clone(),
         }
-        new_grid
     }
 
     // Faster method of computing the product followed by the integral of a number of grids. Like

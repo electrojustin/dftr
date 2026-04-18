@@ -49,9 +49,10 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         let mut overlap_matrix = vec![vec![Complex::new(0.0, 0.0); basis.len()]; basis.len()];
         for i in 0..basis.len() {
             for j in i..basis.len() {
-                let overlap = (basis[i].bra(grid_config.clone())
-                    * basis[j].ket(grid_config.clone()))
-                .integrate();
+                let overlap = Grid::inner_product(vec![
+                    &basis[i].bra(grid_config.clone()),
+                    &basis[j].ket(grid_config.clone()),
+                ]);
                 overlap_matrix[i][j] = overlap;
                 overlap_matrix[j][i] = overlap;
             }
@@ -96,13 +97,14 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         let nuclear_potential_grid = nuclear_potential(&nuclei, grid_config.clone());
         for i in 0..basis.len() {
             for j in 0..basis.len() {
-                let core_hamiltonian = (basis[i].bra(grid_config.clone())
-                    * basis[j].kinetic_energy(grid_config.clone()))
-                .integrate()
-                    + (basis[i].bra(grid_config.clone())
-                        * nuclear_potential_grid.clone()
-                        * basis[j].ket(grid_config.clone()))
-                    .integrate();
+                let core_hamiltonian = Grid::inner_product(vec![
+                    &basis[i].bra(grid_config.clone()),
+                    &basis[j].kinetic_energy(grid_config.clone()),
+                ]) + Grid::inner_product(vec![
+                    &basis[i].bra(grid_config.clone()),
+                    &nuclear_potential_grid.clone(),
+                    &basis[j].ket(grid_config.clone()),
+                ]);
                 fock_cache[i * basis.len() + j] = core_hamiltonian * Complex::new(2.0, 0.0);
             }
         }
