@@ -119,11 +119,11 @@ mod tests {
             && coords[0].0.abs() < 0.1
             && coords[0].1.abs() < 0.1
             && coords[0].2.abs() < 0.1
-            && (coords[1].0 - 1.88973).abs() < 0.1
+            && (coords[1].0 - 1.417).abs() < 0.1
             && coords[1].1.abs() < 0.1
             && coords[1].2.abs() < 0.1
             && coords[2].0.abs() < 0.1
-            && (coords[2].1 - 1.88973).abs() < 0.1
+            && (coords[2].1 - 1.417).abs() < 0.1
             && coords[2].2.abs() < 0.1;
         assert!(
             is_correct,

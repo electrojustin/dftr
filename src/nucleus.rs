@@ -69,7 +69,7 @@ pub fn nuclear_gradients(nuclei: &Vec<Nucleus>, electron_density: Grid) -> Vecto
             let disp_x = nuclei[i].x - nuclei[j].x;
             let disp_y = nuclei[i].y - nuclei[j].y;
             let disp_z = nuclei[i].z - nuclei[j].z;
-            let intermediate = nuclei[i].charge * nuclei[j].charge
+            let intermediate = -nuclei[i].charge * nuclei[j].charge
                 / (disp_x * disp_x + disp_y * disp_y + disp_z * disp_z).powf(3.0 / 2.0);
             grad_x += disp_x * intermediate;
             grad_y += disp_y * intermediate;
@@ -86,28 +86,28 @@ pub fn nuclear_gradients(nuclei: &Vec<Nucleus>, electron_density: Grid) -> Vecto
             let disp_x = nuclei[i].x - x;
             let disp_y = nuclei[i].y - y;
             let disp_z = nuclei[i].z - z;
-            -nuclei[i].charge * val * disp_x
-                / (disp_x * disp_x + disp_y * disp_y + disp_z * disp_z).powf(3.0 / 2.0)
+            nuclei[i].charge * val * disp_x
+                / (disp_x * disp_x + disp_y * disp_y + disp_z * disp_z).max(0.01).powf(3.0 / 2.0)
         });
         let mut grad_y = electron_density.clone();
         grad_y.map(&|x, y, z, val| -> Complex<f64> {
             let disp_x = nuclei[i].x - x;
             let disp_y = nuclei[i].y - y;
             let disp_z = nuclei[i].z - z;
-            -nuclei[i].charge * val * disp_y
-                / (disp_x * disp_x + disp_y * disp_y + disp_z * disp_z).powf(3.0 / 2.0)
+            nuclei[i].charge * val * disp_y
+                / (disp_x * disp_x + disp_y * disp_y + disp_z * disp_z).max(0.01).powf(3.0 / 2.0)
         });
         let mut grad_z = electron_density.clone();
         grad_z.map(&|x, y, z, val| -> Complex<f64> {
             let disp_x = nuclei[i].x - x;
             let disp_y = nuclei[i].y - y;
             let disp_z = nuclei[i].z - z;
-            -nuclei[i].charge * val * disp_z
-                / (disp_x * disp_x + disp_y * disp_y + disp_z * disp_z).powf(3.0 / 2.0)
+            nuclei[i].charge * val * disp_z
+                / (disp_x * disp_x + disp_y * disp_y + disp_z * disp_z).max(0.01).powf(3.0 / 2.0)
         });
         grads[3 * i] += grad_x.integrate();
         grads[3 * i + 1] += grad_y.integrate();
-        grads[3 * i + 2] += grad_y.integrate();
+        grads[3 * i + 2] += grad_z.integrate();
     }
 
     grads.into()

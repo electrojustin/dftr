@@ -174,7 +174,7 @@ fn geometry_optimize(
         let grads = nuclear_gradients(&nuclei, scf_state.electron_density.clone());
 
         // Break if gradients are close to 0
-        if grads.l2().re < args.tolerance_geo {
+        if grads.l2().re < args.tolerance_geo * (grads.0.len() as f64) {
             log::info!("Geometry converged!");
             return Ok(());
         } else {
@@ -187,7 +187,7 @@ fn geometry_optimize(
 
         // Optimize geometry using a Newton-Raphson iteration
         let hessian = nuclear_hessian(&nuclei, scf_state.electron_density.clone());
-        let step = Complex::new(args.damping_geo, 0.0) * (hessian.inverse(1E-10) * grads);
+        let step = Complex::new(args.damping_geo, 0.0) * grads; //Complex::new(args.damping_geo, 0.0) * (hessian.inverse(1E-10) * grads);
         for i in 0..coords.len() {
             coords[i] = (
                 coords[i].0 - step.0[i * 3].re,
