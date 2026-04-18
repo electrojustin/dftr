@@ -6,6 +6,7 @@ use num::complex::Complex;
 
 use crate::basis::Basis;
 use crate::functional::repulsion_potential_functional;
+use crate::functional::RepulsionCache;
 use crate::grid::Grid;
 use crate::grid::GridConfig;
 use crate::linear::Matrix;
@@ -30,6 +31,7 @@ pub struct SCF<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> {
     orthogonalizer: Matrix,
     inverse_orthogonalizer: Matrix,
     fock_cache: Vec<Complex<f64>>,
+    repulsion_cache: RepulsionCache,
 }
 
 impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
@@ -122,6 +124,7 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
                 basis.len(),
             ),
             nuclear_potential: nuclear_potential_grid,
+            repulsion_cache: RepulsionCache::new(grid_config.clone()),
             grid_config,
             basis,
             orthogonalizer,
@@ -186,7 +189,8 @@ impl<XC1: Fn(Grid) -> Grid, XC2: Fn(Grid) -> Grid, B: Basis> SCF<XC1, XC2, B> {
         let nuclear_potential_energy =
             (self.electron_density.clone() * self.nuclear_potential.clone()).integrate();
 
-        self.repulsion_potential = repulsion_potential_functional(self.electron_density.clone());
+        self.repulsion_potential =
+            repulsion_potential_functional(self.electron_density.clone(), &self.repulsion_cache);
         let repulsion_potential_energy =
             0.5 * (self.electron_density.clone() * self.repulsion_potential.clone()).integrate();
 

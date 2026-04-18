@@ -1,10 +1,31 @@
 use num::Complex;
 
 use crate::grid::Grid;
+use crate::grid::GridConfig;
 
 pub mod lda;
 
-pub fn repulsion_potential_functional(mut electron_density: Grid) -> Grid {
+pub struct RepulsionCache {
+    inverse_func_fourier: Grid,
+}
+
+impl RepulsionCache {
+    pub fn new(grid_config: GridConfig) -> Self {
+        let mut inverse_func = Grid::new(grid_config.clone());
+        let x_offset = grid_config.start_x;
+        let y_offset = grid_config.start_y;
+        let z_offset = grid_config.start_z;
+        inverse_func.fill(&|x, y, z| -> Complex<f64> {
+            Complex::new(1.0 / (x * x + y * y + z * z).sqrt().max(0.01), 0.0)
+        });
+        inverse_func.fourier(false, false);
+        Self {
+            inverse_func_fourier: inverse_func,
+        }
+    }
+}
+
+pub fn repulsion_potential_functional(mut electron_density: Grid, cache: &RepulsionCache) -> Grid {
     // Instead of actually performing the double integral, which is O(N^2) with respect to the
     // grid size, we treat the repulsion potential as a convolution between 1/|r| and p(r),
     // which we can compute efficiently in the frequency domain as a simple multiplication. This
@@ -12,17 +33,9 @@ pub fn repulsion_potential_functional(mut electron_density: Grid) -> Grid {
     // I first found this idea referenced here: https://docs.onetep.org/cutoff_coulomb.html
     // But the analytic fourier transforms in this source don't look correct to me, so I just
     // implemented it numerically...
-    let mut potential = electron_density.clone();
-    let x_offset = potential.config.start_x;
-    let y_offset = potential.config.start_y;
-    let z_offset = potential.config.start_z;
-    potential.fill(&|x, y, z| -> Complex<f64> {
-        Complex::new(1.0 / (x * x + y * y + z * z).sqrt().max(0.01), 0.0)
-    });
-    potential.fourier(false, false);
+    assert_eq!(electron_density.config, cache.inverse_func_fourier.config);
     electron_density.fourier(false, false);
-    let mut test = electron_density.clone();
-    potential = potential * electron_density;
+    let mut potential = cache.inverse_func_fourier.clone() * electron_density;
     potential.fourier(true, true);
     potential
 }
@@ -55,7 +68,8 @@ mod tests {
         let bra = test_gto.bra(K_GRID_CONFIG);
         let ket = test_gto.ket(K_GRID_CONFIG);
         let electron_density = bra.clone() * ket.clone();
-        let potential = repulsion_potential_functional(electron_density);
+        let potential =
+            repulsion_potential_functional(electron_density, &RepulsionCache::new(K_GRID_CONFIG));
         let integral = (bra * potential * ket).integrate().re;
         let expected = 1.128 * alpha.sqrt();
         assert!(

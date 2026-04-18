@@ -131,6 +131,7 @@ mod tests {
     use crate::basis::Basis;
     use crate::functional::lda::lda_functional;
     use crate::functional::repulsion_potential_functional;
+    use crate::functional::RepulsionCache;
     use crate::grid::GridConfig;
     use crate::nucleus::nuclear_potential;
     use crate::nucleus::Nucleus;
@@ -192,7 +193,10 @@ mod tests {
         let ket = test.ket(K_GRID_CONFIG);
         let ke = test.kinetic_energy(K_GRID_CONFIG);
         let electron_density = Complex::new(2.0, 0.0) * bra.clone() * ket.clone();
-        let repulsion_pe = repulsion_potential_functional(electron_density.clone());
+        let repulsion_pe = repulsion_potential_functional(
+            electron_density.clone(),
+            &RepulsionCache::new(K_GRID_CONFIG.clone()),
+        );
         let nuclear_pe = nuclear_potential(
             &vec![Nucleus {
                 x: 0.0,
@@ -227,7 +231,10 @@ mod tests {
         let ket = test.ket(K_GRID_CONFIG);
         let ke = test.kinetic_energy(K_GRID_CONFIG);
         let electron_density = Complex::new(2.0, 0.0) * bra.clone() * ket.clone();
-        let repulsion_pe = repulsion_potential_functional(electron_density.clone());
+        let repulsion_pe = repulsion_potential_functional(
+            electron_density.clone(),
+            &RepulsionCache::new(K_GRID_CONFIG.clone()),
+        );
         let nuclear_pe = nuclear_potential(
             &vec![Nucleus {
                 x: 0.0,
