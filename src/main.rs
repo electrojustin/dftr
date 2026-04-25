@@ -83,7 +83,7 @@ struct Args {
     iter_geo: usize,
 
     /// tolerance for geometry optimization convergence
-    #[argh(option, default = "1E-2")]
+    #[argh(option, default = "1E-4")]
     tolerance_geo: f64,
 
     /// damping coefficient for geometry optimization Newton-Raphson
@@ -187,12 +187,12 @@ fn geometry_optimize(
 
         // Optimize geometry using a Newton-Raphson iteration
         let hessian = nuclear_hessian(&nuclei, scf_state.electron_density.clone());
-        let step = Complex::new(args.damping_geo, 0.0) * grads; //Complex::new(args.damping_geo, 0.0) * (hessian.inverse(1E-10) * grads);
+        let step = Complex::new(args.damping_geo, 0.0) * (hessian.inverse(1E-10) * grads);
         for i in 0..coords.len() {
             coords[i] = (
-                coords[i].0 - step.0[i * 3].re,
-                coords[i].1 - step.0[i * 3 + 1].re,
-                coords[i].2 - step.0[i * 3 + 2].re,
+                coords[i].0 + step.0[i * 3].re,
+                coords[i].1 + step.0[i * 3 + 1].re,
+                coords[i].2 + step.0[i * 3 + 2].re,
             );
         }
     }

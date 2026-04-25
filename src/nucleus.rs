@@ -634,12 +634,12 @@ mod tests {
             scf.electron_density.clone(),
         );
         let step = hessian.clone().inverse(1E-20) * grads.clone();
-        nucleus1.x -= step.0[0].re;
-        nucleus1.y -= step.0[1].re;
-        nucleus1.z -= step.0[2].re;
-        nucleus2.x -= step.0[3].re;
-        nucleus2.y -= step.0[4].re;
-        nucleus2.z -= step.0[5].re;
+        nucleus1.x += step.0[0].re;
+        nucleus1.y += step.0[1].re;
+        nucleus1.z += step.0[2].re;
+        nucleus2.x += step.0[3].re;
+        nucleus2.y += step.0[4].re;
+        nucleus2.z += step.0[5].re;
         let corrected_grads = nuclear_gradients(
             &vec![nucleus1.clone(), nucleus2.clone()],
             scf.electron_density.clone(),
